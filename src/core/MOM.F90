@@ -145,7 +145,7 @@ end type MOM_diag_IDs
 
 !> Control structure for the MOM module, including the variables that describe
 !! the state of the ocean.
-type, public :: MOM_control_struct ; private
+type, public :: MOM_control_struct !; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
     h, &            !< layer thickness (m or kg/m2 (H))
     T, &            !< potential temperature (degrees C)

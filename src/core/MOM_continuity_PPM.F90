@@ -2297,8 +2297,8 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
 
   CS%diag => diag
 
-  id_clock_update = cpu_clock_id('(Ocean continuity update)', grain=CLOCK_ROUTINE)
-  id_clock_correct = cpu_clock_id('(Ocean continuity correction)', grain=CLOCK_ROUTINE)
+  id_clock_update = cpu_clock_id('(Ocean continuity update)')!, grain=CLOCK_ROUTINE)
+  id_clock_correct = cpu_clock_id('(Ocean continuity correction)')!, grain=CLOCK_ROUTINE)
 
 end subroutine continuity_PPM_init
 
