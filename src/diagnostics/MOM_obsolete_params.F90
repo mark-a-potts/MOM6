@@ -69,6 +69,9 @@ subroutine find_obsolete_params(param_file)
        hint="Instead use OBC_SEGMENT_XXX_DATA.")
   call obsolete_char(param_file, "EXTEND_OBC_SEGMENTS", &
        hint="This option is no longer needed, nor supported.")
+  call obsolete_char(param_file, "MEKE_VISCOSITY_COEFF", &
+       hint="This option has been replaced by MEKE_VISCOSITY_COEFF_KU and \n" //&
+            " MEKE_VISCOSITY_COEFF_AU. Please set these parameters instead.")
   nseg = 0
   call read_param(param_file, "OBC_NUMBER_OF_SEGMENTS", nseg)
   do l_seg = 1,nseg
@@ -200,6 +203,9 @@ subroutine find_obsolete_params(param_file)
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
+
+  call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
+  call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)

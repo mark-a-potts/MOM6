@@ -53,6 +53,7 @@ use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
 use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
+use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
@@ -198,6 +199,8 @@ type, public :: ocean_state_type
                               !! containing metrics and related information.
   type(verticalGrid_type), pointer :: GV => NULL() !< A pointer to a vertical grid
                               !! structure containing metrics and related information.
+  type(unit_scale_type), pointer :: US => NULL() !< A pointer to a structure containing
+                              !! dimensional unit scaling factors.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: &
@@ -244,8 +247,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
 
-  real :: Rho0           !< The Boussinesq ocean density, in kg m-3.
-  real :: G_Earth        !< The gravitational acceleration in m s-2.
+  real :: Rho0           !< The Boussinesq ocean density [kg m-3].
+  real :: G_Earth        !< The gravitational acceleration [m s-2].
                          !! This include declares and sets the variable "version".
   real :: HFrz           !< If HFrz > 0 (m), melt potential will be computed.
                          !! The actual depth over which melt potential is computed will
@@ -276,22 +279,22 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       input_restart_file=input_restart_file, diag_ptr=OS%diag, &
                       count_calls=.true.)
-  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, C_p=OS%fluxes%C_p, &
+  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%fluxes%C_p, &
                               use_temp=use_temperature)
   OS%C_p = OS%fluxes%C_p
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "RESTART_CONTROL", OS%Restart_control, &
-                 "An integer whose bits encode which restart files are \n"//&
-                 "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
-                 "(bit 0) for a non-time-stamped file.  A restart file \n"//&
-                 "will be saved at the end of the run segment for any \n"//&
+                 "An integer whose bits encode which restart files are "//&
+                 "written. Add 2 (bit 1) for a time-stamped file, and odd "//&
+                 "(bit 0) for a non-time-stamped file.  A restart file "//&
+                 "will be saved at the end of the run segment for any "//&
                  "non-negative value.", default=1)
   call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
-                 "A case-insensitive character string to indicate the \n"//&
-                 "staggering of the surface velocity field that is \n"//&
-                 "returned to the coupler.  Valid values include \n"//&
+                 "A case-insensitive character string to indicate the "//&
+                 "staggering of the surface velocity field that is "//&
+                 "returned to the coupler.  Valid values include "//&
                  "'A', 'B', or 'C'.", default="C")
   if (uppercase(stagger(1:1)) == 'A') then
     Ocean_sfc%stagger = AGRID
@@ -305,17 +308,17 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   end if
 
   call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
-                 "If true, the coupled driver will add a globally-balanced \n"//&
-                 "fresh-water flux that drives sea-surface salinity \n"//&
+                 "If true, the coupled driver will add a globally-balanced "//&
+                 "fresh-water flux that drives sea-surface salinity "//&
                  "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "RESTORE_TEMPERATURE",OS%restore_temp, &
-                 "If true, the coupled driver will add a  \n"//&
-                 "heat flux that drives sea-surface temperauture \n"//&
+                 "If true, the coupled driver will add a "//&
+                 "heat flux that drives sea-surface temperature "//&
                  "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "RHO_0", Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "G_EARTH", G_Earth, &
@@ -336,8 +339,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
     call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
-                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
-                 "below berg are set to zero. Not applied for negative \n"//&
+                 "Fraction of grid cell which iceberg must occupy, so that fluxes "//&
+                 "below berg are set to zero. Not applied for negative "//&
                  " values.", units="non-dim", default=-1.0)
   endif
 
@@ -347,9 +350,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
 
   call get_param(param_file, mdl, "HFREEZE", HFrz, &
-                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
-                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
-                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
                  "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)
 
   if (HFrz .gt. 0.0) then
@@ -361,7 +364,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
-  call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
+  call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
 
   if (OS%use_ice_shelf)  then
@@ -473,7 +476,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   weight = 1.0
 
   call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
-                             OS%grid, OS%forcing_CSp)
+                             OS%grid, OS%US, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
 
@@ -481,7 +484,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%diag)
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%US, OS%forcing_CSp, &
                                OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
@@ -513,7 +516,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%US, OS%forcing_CSp, &
                                OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     if (OS%use_ice_shelf) then
@@ -539,7 +542,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #endif
   endif
 
-  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then

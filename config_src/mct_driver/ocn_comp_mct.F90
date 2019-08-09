@@ -259,19 +259,19 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   if (glb%sw_decomp) then
     call get_param(param_file, mdl, "SW_c1", glb%c1, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "visible, direct shortwave.", units="nondim", default=0.285)
 
     call get_param(param_file, mdl, "SW_c2", glb%c2, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "visible, diffuse shortwave.", units="nondim", default=0.285)
 
     call get_param(param_file, mdl, "SW_c3", glb%c3, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "near-IR, direct shortwave.", units="nondim", default=0.215)
 
     call get_param(param_file, mdl, "SW_c4", glb%c4, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "near-IR, diffuse shortwave.", units="nondim", default=0.215)
   else
     glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
@@ -765,7 +765,7 @@ end subroutine ocean_model_init_sfc
 !! x2o_Foxx_rof
 !!
 !! Variables in MOM6 fluxes that are **NOT** filled by the coupler:
-!! ustar_berg, frictional velocity beneath icebergs (m/s)
+!! ustar_berg, frictional velocity beneath icebergs [m s-1]
 !! area_berg, area covered by icebergs(m2/m2)
 !! mass_berg, mass of icebergs(kg/m2)
 !! runoff_hflx, heat content of liquid runoff (W/m2)
@@ -802,8 +802,8 @@ end subroutine ocean_model_init_sfc
 !!
 !! Surface temperature (Kelvin)
 !! Surface salinity (psu)
-!! Surface eastward velocity (m/s)
-!! Surface northward velocity (m/s)
+!! Surface eastward velocity [m s-1]
+!! Surface northward velocity [m s-1]
 !! Zonal slope in the sea surface height
 !! Meridional slope in the sea surface height
 !!
