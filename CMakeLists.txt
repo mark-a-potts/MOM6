@@ -141,6 +141,10 @@ ecbuild_add_executable( TARGET   mom6.x
                         LINKER_LANGUAGE ${MOM6_LINKER_LANGUAGE}
                        )
 
+if(ECBUILD_INSTALL_FORTRAN_MODULES)
+  install(DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY}/${CMAKE_CFG_INTDIR} DESTINATION ${INSTALL_INCLUDE_DIR})
+endif()
+
 ################################################################################
 # Finalise configuration
 ################################################################################
