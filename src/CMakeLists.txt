@@ -127,7 +127,6 @@ src/parameterizations/vertical/MOM_opacity.F90
 src/parameterizations/vertical/MOM_regularize_layers.F90
 src/parameterizations/vertical/MOM_set_diffusivity.F90
 src/parameterizations/vertical/MOM_set_viscosity.F90
-src/parameterizations/vertical/MOM_shortwave_abs.F90
 src/parameterizations/vertical/MOM_sponge.F90
 src/parameterizations/vertical/MOM_tidal_mixing.F90
 src/parameterizations/vertical/MOM_vert_friction.F90
