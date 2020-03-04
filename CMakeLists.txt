@@ -37,12 +37,27 @@ set( MOM6_LINKER_LANGUAGE Fortran )
 ################################################################################
 
 # LAPACK
-ecbuild_add_option( FEATURE LAPACK
+
+# MKL / LAPACK
+# Default: use MKL as LAPACK implementation.
+# Set -DENABLE_MKL=Off to disable use of MKL and prefer LAPACK
+
+ecbuild_add_option( FEATURE MKL
+                    DESCRIPTION "MKL linear algebra library"
+                    REQUIRED_PACKAGES MKL )
+
+if( HAVE_MKL )
+    set( LAPACK_LIBRARIES ${MKL_LIBRARIES} )
+else()
+    find_package( LAPACK REQUIRED )
+    ecbuild_add_option( FEATURE LAPACK
                     DESCRIPTION "Linear Algebra PACKage"
                     REQUIRED_PACKAGES "LAPACK REQUIRED" )
-if (NOT HAVE_LAPACK)
-  ecbuild_error("LAPACK_LIBRARIES not defined")
+    if (NOT HAVE_LAPACK)
+       ecbuild_error("LAPACK_LIBRARIES not defined")
+    endif()
 endif()
+
 
 # MPI
 ecbuild_add_option( FEATURE MPI DEFAULT ON
