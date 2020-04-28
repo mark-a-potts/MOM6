@@ -67,21 +67,9 @@ include_directories( ${NETCDF_INCLUDE_DIRS} )
 ecbuild_use_package( PROJECT fms REQUIRED )
 include_directories( ${FMS_INCLUDE_DIRS} )
 
-# cvmix
-ecbuild_use_package( PROJECT cvmix REQUIRED )
-include_directories( ${CVMIX_INCLUDE_DIRS} )
-
 # gsw
 ecbuild_use_package( PROJECT gsw REQUIRED )
 include_directories( ${GSW_INCLUDE_DIRS} )
-
-# geoKdTree
-ecbuild_use_package( PROJECT geokdtree REQUIRED )
-include_directories( ${GEOKDTREE_INCLUDE_DIRS} )
-
-# mom6_da_hooks
-ecbuild_use_package( PROJECT mom6_da_hooks REQUIRED )
-include_directories( ${MOM6_DA_HOOKS_INCLUDE_DIRS} )
 
 ################################################################################
 # Definitions
@@ -123,8 +111,8 @@ list( APPEND mom6_src_files
 
 ecbuild_add_library( TARGET   mom6
                      SOURCES  ${mom6_src_files}
-                     LIBS     ${LAPACK_LIBRARIES} ${NETCDF_LIBRARIES} ${FMS_LIBRARIES} ${CVMIX_LIBRARIES} ${GEOKDTREE_LIBRARIES} ${MOM6_DA_HOOKS_LIBRARIES} ${GSW_LIBRARIES}
-                     INCLUDES ${FMS_INCLUDES} ${CVMIX_INCLUDES} ${GEOKDTREE_INCLUDES} ${MOM6_DA_HOOKS_INCLUDES} ${GSW_INCLUDES}
+                     LIBS     ${LAPACK_LIBRARIES} ${NETCDF_LIBRARIES} ${FMS_LIBRARIES} ${GSW_LIBRARIES}
+                     INCLUDES ${FMS_INCLUDES} ${GSW_INCLUDES}
                      INSTALL_HEADERS LISTED
                      LINKER_LANGUAGE ${MOM6_LINKER_LANGUAGE}
                     )
