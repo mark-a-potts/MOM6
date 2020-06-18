@@ -189,6 +189,32 @@ src/user/user_initialization.F90
 src/user/user_revise_forcing.F90
 )
 
+# CVMix
+list(APPEND _files
+src/parameterizations/CVmix/cvmix_background.F90
+src/parameterizations/CVmix/cvmix_convection.F90
+src/parameterizations/CVmix/cvmix_ddiff.F90
+src/parameterizations/CVmix/cvmix_kinds_and_types.F90
+src/parameterizations/CVmix/cvmix_kpp.F90
+src/parameterizations/CVmix/cvmix_math.F90
+src/parameterizations/CVmix/cvmix_put_get.F90
+src/parameterizations/CVmix/cvmix_shear.F90
+src/parameterizations/CVmix/cvmix_tidal.F90
+src/parameterizations/CVmix/cvmix_utils.F90
+)
+
+# MOM6-da-hooks
+list(APPEND _files
+src/ocean_data_assim/core/ocean_da_core.F90
+src/ocean_data_assim/core/ocean_da_types.F90
+src/ocean_data_assim/core/write_ocean_obs.F90
+)
+
+# geoKdTree
+list(APPEND _files
+src/ocean_data_assim/geoKdTree/kdtree.f90
+)
+
 set ( src_files
       ${_files}
       PARENT_SCOPE
