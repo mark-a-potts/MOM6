@@ -34,6 +34,8 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_logical(param_file, "JACOBIAN_PGF", .false., &
        hint="Instead use ANALYTIC_FV_PGF.")
+  call obsolete_logical(param_file, "BLOCKED_ANALYTIC_FV_PGF", &
+       hint="BLOCKED_ANALYTIC_FV_PGF is no longer available.")
 
   call obsolete_logical(param_file, "SADOURNY", &
        hint="Instead use CORIOLIS_SCHEME='SADOURNY'.")
@@ -46,6 +48,9 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_logical(param_file, "BT_CONT_BT_THICK", &
        hint="Instead use BT_THICK_SCHEME='FROM_BT_CONT'.")
+
+  call obsolete_logical(param_file, "ADD_KV_SLOW", &
+       hint="This option is no longer needed, nor supported.")
 
   call obsolete_logical(param_file, "APPLY_OBC_U", &
        hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
