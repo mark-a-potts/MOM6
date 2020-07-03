@@ -71,6 +71,10 @@ include_directories( ${FMS_INCLUDE_DIRS} )
 ecbuild_use_package( PROJECT gsw REQUIRED )
 include_directories( ${GSW_INCLUDE_DIRS} )
 
+# ocean_bgc
+ecbuild_add_option( FEATURE ENABLE_OCEAN_BGC
+                    DEFAULT OFF
+                    DESCRIPTION "Compile and use ocean bgc modules in MOM6" )
 ################################################################################
 # Definitions
 ################################################################################
@@ -108,6 +112,12 @@ list( APPEND mom6_src_files
     ${config_src_files}
     ${src_files}
 )
+
+if (${ENABLE_OCEAN_BGC})
+    add_definitions( -D_USE_GENERIC_TRACER )
+    add_subdirectory( pkg/ocean_BGC )
+    list( APPEND mom6_src_files ${ocean_bgc_src_files} )
+endif()
 
 ecbuild_add_library( TARGET   mom6
                      SOURCES  ${mom6_src_files}
