@@ -39,7 +39,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public :: horiz_interp_and_extrap_tracer, myStats
+public :: horiz_interp_and_extrap_tracer, myStats, meshgrid, fill_miss_2d
 
 ! character(len=40)  :: mdl = "MOM_horizontal_regridding" ! This module's name.
 

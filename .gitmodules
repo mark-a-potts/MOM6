@@ -4,3 +4,7 @@
 [submodule "pkg/GSW-Fortran"]
 	path = pkg/GSW-Fortran
 	url = https://github.com/TEOS-10/GSW-Fortran.git
+[submodule "pkg/ocean_BGC"]
+	path = pkg/ocean_BGC
+	url = https://github.com/NOAA-EMC/ocean_BGC.git
+	branch = noaa-emc
