@@ -8,7 +8,7 @@
 ################################################################################
 
 cmake_minimum_required( VERSION 3.12)
-project( mom6 VERSION 2020.4.0 LANGUAGES Fortran )
+project( mom6 VERSION 2021.7.0 LANGUAGES Fortran )
 
 # ecbuild integration
 find_package(ecbuild 3.3.2 REQUIRED)
@@ -80,7 +80,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 
 # Installed .h include locations
 target_include_directories(mom6 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/config_src/dynamic>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/config_src/memory/dynamic_nonsymmetric>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/framework>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
@@ -88,7 +88,7 @@ target_include_directories(mom6 PUBLIC
 # mom6.x executable
 #-------------------------------------------------------------------------------
 set ( mom6_exe_files
-    config_src/solo_driver/MOM_driver.F90
+    config_src/drivers/solo_driver/MOM_driver.F90
 )
 
 ecbuild_add_executable( TARGET   mom6.x
