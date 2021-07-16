@@ -7,6 +7,7 @@ module MOM_get_input
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use mpp_mod, only: input_nml_filename
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : open_param_file, param_file_type
 use MOM_io, only : file_exists, close_file, slasher, ensembler
@@ -66,8 +67,8 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   if (present(default_input_filename)) input_filename = trim(default_input_filename)
 
   ! Open namelist
-  if (file_exists('input.nml')) then
-    unit = open_namelist_file(file='input.nml')
+  if (file_exists(input_nml_filename)) then
+    unit = open_namelist_file(file=input_nml_filename)
   else
     call MOM_error(FATAL,'Required namelist file input.nml does not exist.')
   endif
