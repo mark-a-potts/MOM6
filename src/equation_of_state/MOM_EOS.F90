@@ -1180,7 +1180,7 @@ end function EOS_domain
 !! integrals in pressure across layers of geopotential anomalies, which are
 !! required for calculating the finite-volume form pressure accelerations in a
 !! non-Boussinesq model.  There are essentially no free assumptions, apart from the
-!! use of Bode's rule to do the horizontal integrals, and from a truncation in the
+!! use of Boole's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
@@ -1253,7 +1253,7 @@ end subroutine analytic_int_specific_vol_dp
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
-                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
+                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, Z_0p)
   type(hor_index_type), intent(in)  :: HI !< Ocean horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
@@ -1292,6 +1292,8 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+
   ! Local variables
   real :: rho_scale  ! A multiplicative factor by which to scale density from kg m-3 to the
                      ! desired units [R m3 kg-1 ~> 1]
@@ -1322,11 +1324,11 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0)) then
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
-                                   dz_neglect, useMassWghtInterp, rho_scale, pres_scale)
+                                   dz_neglect, useMassWghtInterp, rho_scale, pres_scale, Z_0p=Z_0p)
       else
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
-                                   dz_neglect, useMassWghtInterp)
+                                   dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
       endif
     case default
       call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
@@ -1550,12 +1552,12 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
 
   do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
     if (mask_z(i,j,k) >= 1.0) then
-     S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
-!     Get absolute salnity from practical salinity, converting pressures from Pascal to dbar.
+      S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
+!     Get absolute salinity from practical salinity, converting pressures from Pascal to dbar.
 !     If this option is activated, pressure will need to be added as an argument, and it should be
 !     moved out into module that is not shared between components, where the ocean_grid can be used.
 !     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),pres(i,j,k)*1.0e-4,G%geoLonT(i,j),G%geoLatT(i,j))
-     T(i,j,k) = gsw_ct_from_pt(S(i,j,k), T(i,j,k))
+      T(i,j,k) = gsw_ct_from_pt(S(i,j,k), T(i,j,k))
     endif
   enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10

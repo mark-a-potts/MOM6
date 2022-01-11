@@ -239,12 +239,14 @@ end function circ_ridge
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, P_ref)
+subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, eqn_of_state, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
-  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h !< The thickness that is being
                                                               !! initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
@@ -252,9 +254,9 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure [R L2 T-2 ~> Pa].
   ! Local variables
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units [Z ~> m],
+  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in depth units [Z ~> m],
                             ! usually negative because it is positive upward.
-  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile [Z ~> m].
+  real, dimension(SZK_(GV)) :: h_profile ! Vector of initial thickness profile [Z ~> m].
   real :: e_interface ! Current interface position [Z ~> m].
   real :: x,y,r1,r2 ! x,y and radial coordinates for computation of initial pert.
   real :: pert_amp ! Amplitude of perturbations measured in Angstrom_H
@@ -264,7 +266,7 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   character(len=40)  :: mdl = "Neverworld_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   call MOM_mesg("  Neverworld_initialization.F90, Neverworld_initialize_thickness: setting thickness", 5)
   call get_param(param_file, mdl, "INIT_THICKNESS_PROFILE", h_profile, &
@@ -283,7 +285,7 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   enddo
 
   do j=js,je ; do i=is,ie
-    e_interface = -G%bathyT(i,j)
+    e_interface = -depth_tot(i,j)
     do k=nz,2,-1
       h(i,j,k) = GV%Z_to_H * (e0(k) - e_interface) ! Nominal thickness
       x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon

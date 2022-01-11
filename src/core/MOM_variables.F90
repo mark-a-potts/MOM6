@@ -4,15 +4,14 @@ module MOM_variables
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_vector
-use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
-use MOM_debugging, only : hchksum
+use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type
+use MOM_coupler_types, only : coupler_type_spawn, coupler_type_destructor, coupler_type_initialized
+use MOM_debugging,     only : hchksum
+use MOM_domains,       only : MOM_domain_type, get_domain_extent, group_pass_type
+use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_grid, only : ocean_grid_type
-use MOM_EOS, only : EOS_type
-
-use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod, only : coupler_type_spawn, coupler_type_destructor
-use coupler_types_mod, only : coupler_type_initialized
+use MOM_grid,          only : ocean_grid_type
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -43,6 +42,8 @@ type, public :: surface
     SST, &         !< The sea surface temperature [degC].
     SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
     sfc_density, & !< The mixed layer density [R ~> kg m-3].
+    sfc_cfc11,   & !< Sea surface concentration of CFC11 [mol kg-1].
+    sfc_cfc12,   & !< Sea surface concentration of CFC12 [mol kg-1].
     Hml, &         !< The mixed layer depth [Z ~> m].
     u, &           !< The mixed layer zonal velocity [L T-1 ~> m s-1].
     v, &           !< The mixed layer meridional velocity [L T-1 ~> m s-1].
@@ -170,8 +171,14 @@ type, public :: accel_diag_ptrs
     PFv => NULL(), &       !< Meridional acceleration due to pressure forces [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
+    du_dt_str => NULL(), & !< Zonal acceleration due to the surface stress (included
+                           !! in du_dt_visc) [L T-2 ~> m s-2]
+    dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included
+                           !! in dv_dt_visc) [L T-2 ~> m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
-    dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
@@ -187,6 +194,12 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points
   real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
+  real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
+  real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+
+  real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
+  real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
+
 end type accel_diag_ptrs
 
 !> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
@@ -200,7 +213,7 @@ type, public :: cont_diag_ptrs
     vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
 
 ! Each of the following fields is found at nz+1 interfaces.
-  real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity [H T-1 ~> m s-1 or kg m-2 s-1]
 
 end type cont_diag_ptrs
 
@@ -241,15 +254,6 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:,:) :: &
     Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points [Z T-1 ~> m s-1].
     Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
-  real, pointer, dimension(:,:,:) :: Kd_extra_T => NULL()
-                !< The extra diffusivity of temperature due to double diffusion relative to the
-                !! diffusivity of density [Z2 T-1 ~> m2 s-1].
-  real, pointer, dimension(:,:,:) :: Kd_extra_S => NULL()
-                !< The extra diffusivity of salinity due to double diffusion relative to the
-                !! diffusivity of density [Z2 T-1 ~> m2 s-1].
-  ! One of Kd_extra_T and Kd_extra_S is always 0. Kd_extra_S is positive for salt fingering;
-  ! Kd_extra_T is positive for double diffusive convection.  They are only allocated if
-  ! DOUBLE_DIFFUSION is true.
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns [Z2 T-1 ~> m2 s-1].
@@ -305,7 +309,8 @@ contains
 !> Allocates the fields for the surface (return) properties of
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn, use_meltpot, use_iceshelves, omit_frazil)
+                                  gas_fields_ocn, use_meltpot, use_iceshelves, &
+                                  omit_frazil, use_cfcs)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
@@ -318,13 +323,14 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
   logical,     optional, intent(in)    :: use_meltpot      !< If true, allocate the space for melt potential
+  logical,     optional, intent(in)    :: use_cfcs         !< If true, allocate the space for cfcs
   logical,     optional, intent(in)    :: use_iceshelves   !< If true, allocate the space for the stresses
                                                            !! under ice shelves.
   logical,     optional, intent(in)    :: omit_frazil      !< If present and false, do not allocate the space to
                                                            !! pass frazil fluxes to the coupler
 
   ! local variables
-  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil
+  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil, alloc_cfcs
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -335,44 +341,50 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
   use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
+  alloc_cfcs = .false. ; if (present(use_cfcs)) alloc_cfcs = use_cfcs
   alloc_iceshelves = .false. ; if (present(use_iceshelves)) alloc_iceshelves = use_iceshelves
   alloc_frazil = .true. ; if (present(omit_frazil)) alloc_frazil = .not.omit_frazil
 
   if (sfc_state%arrays_allocated) return
 
   if (use_temp) then
-    allocate(sfc_state%SST(isd:ied,jsd:jed)) ; sfc_state%SST(:,:) = 0.0
-    allocate(sfc_state%SSS(isd:ied,jsd:jed)) ; sfc_state%SSS(:,:) = 0.0
+    allocate(sfc_state%SST(isd:ied,jsd:jed), source=0.0)
+    allocate(sfc_state%SSS(isd:ied,jsd:jed), source=0.0)
   else
-    allocate(sfc_state%sfc_density(isd:ied,jsd:jed)) ; sfc_state%sfc_density(:,:) = 0.0
+    allocate(sfc_state%sfc_density(isd:ied,jsd:jed), source=0.0)
   endif
   if (use_temp .and. alloc_frazil) then
-    allocate(sfc_state%frazil(isd:ied,jsd:jed)) ; sfc_state%frazil(:,:) = 0.0
+    allocate(sfc_state%frazil(isd:ied,jsd:jed), source=0.0)
   endif
-  allocate(sfc_state%sea_lev(isd:ied,jsd:jed)) ; sfc_state%sea_lev(:,:) = 0.0
-  allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
-  allocate(sfc_state%u(IsdB:IedB,jsd:jed)) ; sfc_state%u(:,:) = 0.0
-  allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
+  allocate(sfc_state%sea_lev(isd:ied,jsd:jed), source=0.0)
+  allocate(sfc_state%Hml(isd:ied,jsd:jed), source=0.0)
+  allocate(sfc_state%u(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(sfc_state%v(isd:ied,JsdB:JedB), source=0.0)
 
   if (use_melt_potential) then
-    allocate(sfc_state%melt_potential(isd:ied,jsd:jed)) ; sfc_state%melt_potential(:,:) = 0.0
+    allocate(sfc_state%melt_potential(isd:ied,jsd:jed), source=0.0)
+  endif
+
+  if (alloc_cfcs) then
+    allocate(sfc_state%sfc_cfc11(isd:ied,jsd:jed), source=0.0)
+    allocate(sfc_state%sfc_cfc12(isd:ied,jsd:jed), source=0.0)
   endif
 
   if (alloc_integ) then
     ! Allocate structures for the vertically integrated ocean_mass, ocean_heat, and ocean_salt.
-    allocate(sfc_state%ocean_mass(isd:ied,jsd:jed)) ; sfc_state%ocean_mass(:,:) = 0.0
+    allocate(sfc_state%ocean_mass(isd:ied,jsd:jed), source=0.0)
     if (use_temp) then
-      allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
-      allocate(sfc_state%ocean_salt(isd:ied,jsd:jed)) ; sfc_state%ocean_salt(:,:) = 0.0
-      allocate(sfc_state%TempxPmE(isd:ied,jsd:jed))   ; sfc_state%TempxPmE(:,:) = 0.0
-      allocate(sfc_state%salt_deficit(isd:ied,jsd:jed))  ; sfc_state%salt_deficit(:,:) = 0.0
-      allocate(sfc_state%internal_heat(isd:ied,jsd:jed)) ; sfc_state%internal_heat(:,:) = 0.0
+      allocate(sfc_state%ocean_heat(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%ocean_salt(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%TempxPmE(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%salt_deficit(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%internal_heat(isd:ied,jsd:jed), source=0.0)
     endif
   endif
 
   if (alloc_iceshelves) then
-    allocate(sfc_state%taux_shelf(IsdB:IedB,jsd:jed)) ; sfc_state%taux_shelf(:,:) = 0.0
-    allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB)) ; sfc_state%tauy_shelf(:,:) = 0.0
+    allocate(sfc_state%taux_shelf(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB), source=0.0)
   endif
 
   if (present(gas_fields_ocn)) &
@@ -401,7 +413,8 @@ subroutine deallocate_surface_state(sfc_state)
   if (allocated(sfc_state%ocean_heat)) deallocate(sfc_state%ocean_heat)
   if (allocated(sfc_state%ocean_salt)) deallocate(sfc_state%ocean_salt)
   if (allocated(sfc_state%salt_deficit)) deallocate(sfc_state%salt_deficit)
-
+  if (allocated(sfc_state%sfc_cfc11)) deallocate(sfc_state%sfc_cfc11)
+  if (allocated(sfc_state%sfc_cfc12)) deallocate(sfc_state%sfc_cfc12)
   call coupler_type_destructor(sfc_state%tr_fields)
 
   sfc_state%arrays_allocated = .false.
@@ -457,7 +470,7 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
     if (use_temperature) then
       call rotate_array(sfc_state_in%ocean_heat, turns, sfc_state%ocean_heat)
       call rotate_array(sfc_state_in%ocean_salt, turns, sfc_state%ocean_salt)
-      call rotate_array(sfc_state_in%SSS, turns, sfc_state%TempxPmE)
+      call rotate_array(sfc_state_in%SSS, turns, sfc_state%SSS)
       call rotate_array(sfc_state_in%salt_deficit, turns, sfc_state%salt_deficit)
       call rotate_array(sfc_state_in%internal_heat, turns, sfc_state%internal_heat)
     endif
@@ -477,42 +490,42 @@ subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
 
   ! TODO: tracer field rotation
   if (coupler_type_initialized(sfc_state_in%tr_fields)) &
-    call MOM_error(FATAL, "Rotation of surface state tracers is not yet " &
-        // "implemented.")
+    call MOM_error(FATAL, "Rotation of surface state tracers is not yet implemented.")
 end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
-subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
-  type(BT_cont_type),    pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  logical,     optional, intent(in) :: alloc_faces !< If present and true, allocate
+subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
+  type(BT_cont_type),      pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  logical,       optional, intent(in) :: alloc_faces !< If present and true, allocate
                                             !! memory for effective face thicknesses.
 
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(BT_cont)) call MOM_error(FATAL, &
     "alloc_BT_cont_type called with an associated BT_cont_type pointer.")
 
   allocate(BT_cont)
-  allocate(BT_cont%FA_u_WW(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_WW(:,:) = 0.0
-  allocate(BT_cont%FA_u_W0(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_W0(:,:) = 0.0
-  allocate(BT_cont%FA_u_E0(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_E0(:,:) = 0.0
-  allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_EE(:,:) = 0.0
-  allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed))  ; BT_cont%uBT_WW(:,:) = 0.0
-  allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed))  ; BT_cont%uBT_EE(:,:) = 0.0
+  allocate(BT_cont%FA_u_WW(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%FA_u_W0(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%FA_u_E0(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed), source=0.0)
 
-  allocate(BT_cont%FA_v_SS(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_SS(:,:) = 0.0
-  allocate(BT_cont%FA_v_S0(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_S0(:,:) = 0.0
-  allocate(BT_cont%FA_v_N0(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_N0(:,:) = 0.0
-  allocate(BT_cont%FA_v_NN(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_NN(:,:) = 0.0
-  allocate(BT_cont%vBT_SS(isd:ied,JsdB:JedB))  ; BT_cont%vBT_SS(:,:) = 0.0
-  allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB))  ; BT_cont%vBT_NN(:,:) = 0.0
+  allocate(BT_cont%FA_v_SS(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%FA_v_S0(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%FA_v_N0(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%FA_v_NN(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%vBT_SS(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB), source=0.0)
 
   if (present(alloc_faces)) then ; if (alloc_faces) then
-    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:G%ke)) ; BT_cont%h_u(:,:,:) = 0.0
-    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:G%ke)) ; BT_cont%h_v(:,:,:) = 0.0
+    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz), source=0.0)
+    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:nz), source=0.0)
   endif ; endif
 
 end subroutine alloc_BT_cont_type

@@ -5,7 +5,7 @@ module MOM_grid
 
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
-use MOM_domains, only : get_global_shape, get_domain_extent_dsamp2
+use MOM_domains, only : get_global_shape, deallocate_MOM_domain
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_unit_scaling, only : unit_scale_type
@@ -283,10 +283,10 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   G%bathymetry_at_vel = .false.
   if (present(bathymetry_at_vel)) G%bathymetry_at_vel = bathymetry_at_vel
   if (G%bathymetry_at_vel) then
-    ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
-    ALLOC_(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
-    ALLOC_(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = 0.0
-    ALLOC_(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
+    ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = -G%Z_ref
+    ALLOC_(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = -G%Z_ref
+    ALLOC_(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = -G%Z_ref
+    ALLOC_(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = -G%Z_ref
   endif
 
 ! setup block indices.
@@ -363,9 +363,9 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
-  call get_domain_extent_dsamp2(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec,&
-                                          G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed,&
-                                          G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg)
+  call get_domain_extent(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, &
+                         G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed, &
+                         G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg, coarsen=2)
 
   ! Set array sizes for fields that are discretized at tracer cell boundaries.
   G%HId2%IscB = G%HId2%isc ; G%HId2%JscB = G%HId2%jsc
@@ -387,6 +387,7 @@ end subroutine MOM_grid_init
 subroutine rescale_grid_bathymetry(G, m_in_new_units)
   type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
   real,                  intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
+  ! It appears that this routine is never called.
 
   ! Local variables
   real :: rescale
@@ -578,7 +579,7 @@ subroutine allocate_metrics(G)
   ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
   ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
 
-  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0
+  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = -G%Z_ref
   ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
@@ -586,16 +587,23 @@ subroutine allocate_metrics(G)
   ALLOC_(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
   ALLOC_(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
 
-  allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
-  allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
-  allocate(G%gridLatT(jsg:jeg))   ; G%gridLatT(:) = 0.0
-  allocate(G%gridLatB(G%JsgB:G%JegB)) ; G%gridLatB(:) = 0.0
+  allocate(G%gridLonT(isg:ieg), source=0.0)
+  allocate(G%gridLonB(G%IsgB:G%IegB), source=0.0)
+  allocate(G%gridLatT(jsg:jeg), source=0.0)
+  allocate(G%gridLatB(G%JsgB:G%JegB), source=0.0)
 
 end subroutine allocate_metrics
 
 !> Release memory used by the ocean_grid_type and related structures.
 subroutine MOM_grid_end(G)
   type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
+
+  deallocate(G%Block)
+
+  if (G%bathymetry_at_vel) then
+    DEALLOC_(G%Dblock_u) ; DEALLOC_(G%Dopen_u)
+    DEALLOC_(G%Dblock_v) ; DEALLOC_(G%Dopen_v)
+  endif
 
   DEALLOC_(G%dxT)  ; DEALLOC_(G%dxCu)  ; DEALLOC_(G%dxCv)  ; DEALLOC_(G%dxBu)
   DEALLOC_(G%IdxT) ; DEALLOC_(G%IdxCu) ; DEALLOC_(G%IdxCv) ; DEALLOC_(G%IdxBu)
@@ -622,16 +630,12 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
   DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
 
-  if (G%bathymetry_at_vel) then
-    DEALLOC_(G%Dblock_u) ; DEALLOC_(G%Dopen_u)
-    DEALLOC_(G%Dblock_v) ; DEALLOC_(G%Dopen_v)
-  endif
-
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  deallocate(G%Domain%mpp_domain)
-  deallocate(G%Domain)
+  ! The cursory flag avoids doing any deallocation of memory in the underlying
+  ! infrastructure to avoid problems due to shared pointers.
+  call deallocate_MOM_domain(G%Domain, cursory=.true.)
 
 end subroutine MOM_grid_end
 
