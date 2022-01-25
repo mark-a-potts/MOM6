@@ -10,7 +10,6 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
@@ -236,7 +235,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
     CS%Flux_const = CS%Flux_const / 86400.0
 
 
-    allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed)); CS%forcing_mask(:,:)=0.0
+    allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed), source=0.0)
     allocate(CS%S_restore(G%isd:G%ied, G%jsd:G%jed))
 
     do j=G%jsc,G%jec

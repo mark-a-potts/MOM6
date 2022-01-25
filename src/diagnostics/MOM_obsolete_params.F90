@@ -60,7 +60,6 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_logical(param_file, "SALT_REJECT_BELOW_ML", .false.)
   call obsolete_logical(param_file, "MLE_USE_MLD_AVE_BUG", .false.)
-  call obsolete_logical(param_file, "KG_BG_2D_BUG", .false.)
   call obsolete_logical(param_file, "CORRECT_DENSITY", .true.)
   call obsolete_char(param_file, "WINDSTRESS_STAGGER", warning_val="C", &
                      hint="Use WIND_STAGGER instead.")
@@ -69,7 +68,6 @@ subroutine find_obsolete_params(param_file)
                      hint="Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_real(param_file, "VSTAR_SCALE_FACTOR", hint="Use EPBL_VEL_SCALE_FACTOR instead.")
-  call obsolete_logical(param_file, "ORIG_MLD_ITERATION", .false.)
 
   call obsolete_real(param_file, "VSTAR_SCALE_COEF")
   call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
@@ -89,6 +87,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
 
+  call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
 

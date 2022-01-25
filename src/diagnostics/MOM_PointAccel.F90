@@ -15,8 +15,7 @@ use MOM_error_handler, only : MOM_error, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : open_file
-use MOM_io, only : APPEND_FILE, ASCII_FILE, MULTIPLE, SINGLE_FILE
+use MOM_io, only : open_ASCII_file, APPEND_FILE, MULTIPLE, SINGLE_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_date, operator(-)
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : ocean_internal_state, accel_diag_ptrs, cont_diag_ptrs
@@ -71,9 +70,9 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),       intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                intent(in) :: um  !< The new zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                intent(in) :: hin !< The layer thickness [H ~> m or kg m-2].
   type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
                                                  !! accelerations in the momentum equations.
@@ -85,9 +84,9 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1].
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step divided by the Boussinesq density [m2 s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
   ! Local variables
@@ -95,13 +94,13 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   real    :: Angstrom
   real    :: truncvel, du
   real    :: dt  ! The time step [s]
-  real    :: Inorm(SZK_(G))
-  real    :: e(SZK_(G)+1)
+  real    :: Inorm(SZK_(GV))
+  real    :: e(SZK_(GV)+1)
   real    :: h_scale, uh_scale
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
-  logical :: do_k(SZK_(G)+1)
+  logical :: do_k(SZK_(GV)+1)
   logical :: prev_avail
   integer :: file
 
@@ -110,7 +109,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   h_scale = GV%H_to_m ; uh_scale = GV%H_to_m*US%L_T_to_m_s
 
 !  if (.not.associated(CS)) return
-  nz = G%ke
+  nz = GV%ke
   if (CS%cols_written < CS%max_writes) then
     CS%cols_written = CS%cols_written + 1
 
@@ -120,8 +119,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   ! Open up the file for output if this is the first call.
     if (CS%u_file < 0) then
       if (len_trim(CS%u_trunc_file) < 1) return
-      call open_file(CS%u_file, trim(CS%u_trunc_file), action=APPEND_FILE, &
-                     form=ASCII_FILE, threading=MULTIPLE, fileset=SINGLE_FILE)
+      call open_ASCII_file(CS%u_file, trim(CS%u_trunc_file), action=APPEND_FILE, &
+                           threading=MULTIPLE, fileset=SINGLE_FILE)
       if (CS%u_file < 0) then
         call MOM_error(NOTE, 'Unable to open file '//trim(CS%u_trunc_file)//'.')
         return
@@ -249,13 +248,13 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j+1,k)); enddo
 
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i,j)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k) ; enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i+1,j)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i+1,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i+1,j,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
@@ -332,7 +331,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
                        (0.5*US%L_T_to_m_s*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*G%bathyT(i,j),US%Z_to_m*G%bathyT(i+1,j)
+    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*(G%bathyT(i,j) + G%Z_ref), US%Z_to_m*(G%bathyT(i+1,j) + G%Z_ref)
 
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
@@ -390,7 +389,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
 
     write(file,'(2/)')
 
-    call flush(file)
+    flush(file)
   endif
 
 end subroutine write_u_accel
@@ -404,9 +403,9 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),       intent(in) :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                intent(in) :: vm  !< The new meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                intent(in) :: hin !< The layer thickness [H ~> m or kg m-2].
   type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
                                                  !! accelerations in the momentum equations.
@@ -418,9 +417,9 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1].
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step divided by the Boussinesq density [m2 s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                      optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
   ! Local variables
@@ -428,13 +427,13 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   real    :: Angstrom
   real    :: truncvel, dv
   real    :: dt  ! The time step [s]
-  real    :: Inorm(SZK_(G))
-  real    :: e(SZK_(G)+1)
+  real    :: Inorm(SZK_(GV))
+  real    :: e(SZK_(GV)+1)
   real    :: h_scale, uh_scale
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
-  logical :: do_k(SZK_(G)+1)
+  logical :: do_k(SZK_(GV)+1)
   logical :: prev_avail
   integer :: file
 
@@ -443,7 +442,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   h_scale = GV%H_to_m ; uh_scale = GV%H_to_m*US%L_T_to_m_s
 
 !  if (.not.associated(CS)) return
-  nz = G%ke
+  nz = GV%ke
   if (CS%cols_written < CS%max_writes) then
     CS%cols_written = CS%cols_written + 1
 
@@ -453,8 +452,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   ! Open up the file for output if this is the first call.
     if (CS%v_file < 0) then
       if (len_trim(CS%v_trunc_file) < 1) return
-      call open_file(CS%v_file, trim(CS%v_trunc_file), action=APPEND_FILE, &
-                     form=ASCII_FILE, threading=MULTIPLE, fileset=SINGLE_FILE)
+      call open_ASCII_file(CS%v_file, trim(CS%v_trunc_file), action=APPEND_FILE, &
+                           threading=MULTIPLE, fileset=SINGLE_FILE)
       if (CS%v_file < 0) then
         call MOM_error(NOTE, 'Unable to open file '//trim(CS%v_trunc_file)//'.')
         return
@@ -585,13 +584,13 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     write(file,'(/,"h++:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j+1,k); enddo
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i,j)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k); enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i,j+1)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i,j+1) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j+1,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
@@ -668,7 +667,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
             (CS%u_prev(I,j+1,k) * h_scale*0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*G%bathyT(i,j),US%Z_to_m*G%bathyT(i,j+1)
+    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*(G%bathyT(i,j) + G%Z_ref), US%Z_to_m*(G%bathyT(i,j+1) + G%Z_ref)
 
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
@@ -722,7 +721,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
 
     write(file,'(2/)')
 
-    call flush(file)
+    flush(file)
   endif
 
 end subroutine write_v_accel

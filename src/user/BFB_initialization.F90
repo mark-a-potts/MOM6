@@ -76,13 +76,15 @@ end subroutine BFB_set_coord
 
 !> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
-subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, param_file, CSp, h)
+subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, depth_tot, param_file, CSp, h)
   type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   logical,                 intent(in) :: use_temperature !< If true, temperature and salinity are used as
                                             !! state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CSp  !< A pointer to the sponge control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -98,7 +100,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
@@ -128,8 +130,8 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
 
   max_damping = 1.0  / (86400.0*US%s_to_T)
 
-  do i=is,ie; do j=js,je
-    if (G%bathyT(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
+  do j=js,je ; do i=is,ie
+    if (depth_tot(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
     elseif (G%geoLatT(i,j) < slat+2.0) then ; Idamp(i,j) = max_damping
     elseif (G%geoLatT(i,j) < slat+4.0) then
       Idamp(i,j) = max_damping * (slat+4.0-G%geoLatT(i,j))/2.0
