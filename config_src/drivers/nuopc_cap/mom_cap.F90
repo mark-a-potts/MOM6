@@ -12,7 +12,7 @@ use mpp_domains_mod,          only: domain2d, mpp_get_compute_domain, mpp_get_co
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
 use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR, MPP_APPEND, mpp_close, MPP_SINGLE
-use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
+use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id, mpp_init
 use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
 use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
 use time_manager_mod,         only: set_calendar_type, time_type, increment_date
@@ -488,6 +488,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 !$  call omp_set_num_threads(nthrds)
   write(6,*) "HEY, calling fms_init from MOM"
   call fms_init(mpi_comm_mom)
+  call mpp_init(mpi_comm_mom)
   write(6,*) "HEY, calling constants_init from MOM"
   call constants_init
   write(6,*) "HEY, calling fieldm_init from MOM"
