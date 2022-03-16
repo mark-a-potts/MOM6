@@ -519,27 +519,34 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
      call set_calendar_type (JULIAN)
   endif
 
-  write(6,*) "HEY, done calling diag_init from MOM"
+  write(6,*) "HEY, calling diag_init from MOM"
   call diag_manager_init
+  write(6,*) "HEY, done calling diag_init from MOM"
 
   ! this ocean connector will be driven at set interval
   DT = set_time (DT_OCEAN, 0)
+  write(6,*) "HEY, done setting time"
   ! get current time
   time_start = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+  write(6,*) "HEY, done getting time"
 
   if (is_root_pe()) then
     write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
 
   ! get start/reference time
+  write(6,*) "HEY, getting clock"
   call ESMF_ClockGet(CLOCK, refTime=MyTime, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+  write(6,*) "HEY, getting TimeGet"
   call ESMF_TimeGet (MyTime, YY=YEAR, MM=MONTH, DD=DAY, H=HOUR, M=MINUTE, S=SECOND, RC=rc )
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+  write(6,*) "HEY, getting set_date0"
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
+  write(6,*) "HEY, done getting set_date0"
   if (is_root_pe()) then
     write(logunit,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
@@ -548,17 +555,22 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
   !inst_name = "OCN"//trim(inst_suffix)
 
+  write(6,*) "HEY, reset shr logging"
   ! reset shr logging to my log file
   if (is_root_pe()) then
+     write(6,*) "HEY, attget1"
      call NUOPC_CompAttributeGet(gcomp, name="diro", &
           isPresent=isPresentDiro, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     write(6,*) "HEY, attget2"
      call NUOPC_CompAttributeGet(gcomp, name="logfile", &
           isPresent=isPresentLogfile, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
      if (isPresentDiro .and. isPresentLogfile) then
+     write(6,*) "HEY, attget3"
           call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     write(6,*) "HEY, attget4"
           call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
           open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
