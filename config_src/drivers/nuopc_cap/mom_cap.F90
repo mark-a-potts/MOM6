@@ -493,6 +493,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   write(6,*) "HEY, calling fieldm_init from MOM"
   call field_manager_init
 
+  write(6,*) "HEY, done calling fieldm_init from MOM"
   ! determine the calendar
   if (cesm_coupled) then
      call NUOPC_CompAttributeGet(gcomp, name="calendar", value=cvalue, &
@@ -518,6 +519,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
      call set_calendar_type (JULIAN)
   endif
 
+  write(6,*) "HEY, done calling diag_init from MOM"
   call diag_manager_init
 
   ! this ocean connector will be driven at set interval
@@ -567,6 +569,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
      logunit = output_unit
   endif
 
+  write(6,*) "HEY, done calling diro from MOM"
   starttype = ""
   call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, &
        isPresent=isPresent, isSet=isSet, rc=rc)
@@ -578,6 +581,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
           ESMF_LOGMSG_INFO)
   endif
 
+  write(6,*) "HEY, done calling start_type from MOM"
   runtype = ""
   if (trim(starttype) == trim('startup')) then
      runtype = "initial"
