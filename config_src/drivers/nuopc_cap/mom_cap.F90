@@ -486,9 +486,11 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call ESMF_LogWrite(trim(subname)//': nthreads = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
 !$  call omp_set_num_threads(nthrds)
-
+  write(6,*) "HEY, calling fms_init from MOM"
   call fms_init(mpi_comm_mom)
+  write(6,*) "HEY, calling constants_init from MOM"
   call constants_init
+  write(6,*) "HEY, calling fieldm_init from MOM"
   call field_manager_init
 
   ! determine the calendar
