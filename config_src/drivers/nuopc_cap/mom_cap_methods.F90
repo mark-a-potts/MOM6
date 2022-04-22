@@ -362,6 +362,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   real(ESMF_KIND_R8), allocatable :: ocz(:,:), ocm(:,:)
   real(ESMF_KIND_R8), allocatable :: ocz_rot(:,:), ocm_rot(:,:)
   real(ESMF_KIND_R8), allocatable :: ssh(:,:)
+  real(ESMF_KIND_R8), allocatable :: PT(:,:,:)
   real(ESMF_KIND_R8), allocatable :: dhdx(:,:), dhdy(:,:)
   real(ESMF_KIND_R8), allocatable :: dhdx_rot(:,:), dhdy_rot(:,:)
   character(len=*)  , parameter   :: subname = '(mom_export)'
@@ -502,10 +503,17 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   ! 3d potential temperature
   ! -------
   allocate(PT(isc:iec, jsc:jec, ocean_grid%ke))
+  do k = 1,ocean_grid%ke
+    do j = jsc,jec
+       do i = isc,iec
+         PT(i,j,k) =  ocean_state%MOM_CSp%T(i,j,k)
+       enddo 
+    enddo 
+  enddo 
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State3d_SetExport(exportState, 'tocn', &
-          isc, iec, jsc, jec, thermo_var_ptrs%T, ocean_grid, rc=rc)
+          isc, iec, jsc, jec, PT, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
 
@@ -837,7 +845,7 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   integer             , intent(in)      :: jec     !< The end j-index of cell centers within
                                                    !! the computational domain
   integer             , intent(in)      :: ke      !< The number of vertical levels
-  real (ESMF_KIND_R8)   , intent(in)    :: input(isc:iec,jsc:jec)!< Input 2D array
+  real (ESMF_KIND_R8)   , intent(in)    :: input(isc:iec,jsc:jec,1:ke)!< Input 3D array
   type(ocean_grid_type) , intent(in)    :: ocean_grid !< Ocean horizontal grid
   real (ESMF_KIND_R8), optional,  intent(in) :: areacor(:) !< flux area correction factors
                                                            !! applicable to meshes
