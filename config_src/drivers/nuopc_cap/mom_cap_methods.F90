@@ -41,6 +41,7 @@ private :: State3d_setExport
 interface State_GetFldPtr
    module procedure State_GetFldPtr_1d
    module procedure State_GetFldPtr_2d
+   module procedure State_GetFldPtr_3d
 end interface
 
 integer                  :: import_cnt = 0!< used to skip using the import state
@@ -669,6 +670,27 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
 
 end subroutine State_GetFldPtr_2d
 
+!> Get field pointer 3D
+subroutine State_GetFldPtr_3d(State, fldname, fldptr, rc)
+  type(ESMF_State)            , intent(in)  :: State      !< ESMF state
+  character(len=*)            , intent(in)  :: fldname    !< Field name
+  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:,:)!< Pointer to the 3D field
+  integer, optional           , intent(out) :: rc         !< Return code
+
+  ! local variables
+  type(ESMF_Field) :: lfield
+  integer :: lrc
+  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
+
+  call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  if (present(rc)) rc = lrc
+
+end subroutine State_GetFldPtr_3d
+
 !> Map import state field to output array
 subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
   type(ESMF_State)    , intent(in)    :: state   !< ESMF state
@@ -877,7 +899,7 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
 
         lbnd1 = lbound(dataPtr3d,1)
         lbnd2 = lbound(dataPtr3d,2)
-        do k=1,nk
+        do k=1,ke
           do j=jsc,jec
             do i=isc,iec
               dataptr3d(i,j,k) = input(i-isc+1,j-jsc+1,k)
