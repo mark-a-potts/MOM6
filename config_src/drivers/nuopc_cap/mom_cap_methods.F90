@@ -348,7 +348,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   integer                         :: isc, iec, jsc, jec   ! indices
   integer                         :: iloc, jloc           ! indices
   integer                         :: iglob, jglob         ! indices
-  integer                         :: n
+  integer                         :: n, k
   integer                         :: icount
   real                            :: slp_L, slp_R, slp_C
   real                            :: slope, u_min, u_max
@@ -513,7 +513,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State3d_SetExport(exportState, 'tocn', &
-          isc, iec, jsc, jec, PT, ocean_grid, rc=rc)
+          isc, iec, jsc, jec, ocean_grid%ke, PT, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
 
@@ -831,6 +831,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
      endif
 
   endif
+end subroutine State_SetExport
 
 !> Map input array to export state
 subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocean_grid, areacor, rc)
@@ -853,10 +854,9 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
-  integer                       :: n, i, j, i1, j1, ig,jg
+  integer                       :: n, i, j, i1, j1, ig,jg, k
   integer                       :: lbnd1,lbnd2
-  real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
-  real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
+  real(ESMF_KIND_R8), pointer   :: dataPtr3d(:,:,:)
   character(len=*)  , parameter :: subname='(MOM_cap_methods:state_setexport)'
   ! ----------------------------------------------
 
@@ -867,50 +867,29 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   ! mask from "ocean_grid" uses local indexing with halos
 
   call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
+#if 1
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
 
-     if (geomtype == ESMF_GEOMTYPE_MESH) then
+     if (geomtype == ESMF_GEOMTYPE_GRID) then
 
-        call state_getfldptr(state, trim(fldname), dataptr1d, rc)
+        call state_getfldptr(state, trim(fldname), dataptr3d, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-        n = 0
-        do j = jsc, jec
-           jg = j + ocean_grid%jsc - jsc
-           do i = isc, iec
-              ig = i + ocean_grid%isc - isc
-              n = n+1
-              dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
-           enddo
-        enddo
-        if (present(areacor)) then
-           do n = 1,(size(dataPtr1d))
-              dataPtr1d(n) = dataPtr1d(n) * areacor(n)
-           enddo
-        end if
-
-     else if (geomtype == ESMF_GEOMTYPE_GRID) then
-
-        call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-        lbnd1 = lbound(dataPtr2d,1)
-        lbnd2 = lbound(dataPtr2d,2)
-
-        do j = jsc, jec
-           j1 = j + lbnd2 - jsc
-           jg = j + ocean_grid%jsc - jsc
-           do i = isc, iec
-              i1 = i + lbnd1 - isc
-              ig = i + ocean_grid%isc - isc
-              dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
-           enddo
+        lbnd1 = lbound(dataPtr3d,1)
+        lbnd2 = lbound(dataPtr3d,2)
+        do k=1,nk
+          do j=jsc,jec
+            do i=isc,iec
+              dataptr3d(i,j,k) = input(i-isc+1,j-jsc+1,k)
+            enddo
+          enddo
         enddo
 
      endif
 
   endif
-end subroutine State_SetExport
+#endif
+end subroutine State3d_SetExport
 
 !> This subroutine writes the minimum, maximum and sum of each field
 !! contained within an ESMF state.
