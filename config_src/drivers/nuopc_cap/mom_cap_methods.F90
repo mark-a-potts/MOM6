@@ -21,6 +21,7 @@ use MOM_surface_forcing_nuopc, only: ice_ocean_boundary_type
 use MOM_grid,                  only: ocean_grid_type
 use MOM_domains,               only: pass_var
 use mpp_domains_mod,           only: mpp_get_compute_domain
+use MOM_variables,             only: thermo_var_ptrs
 
 ! By default make data private
 implicit none; private
@@ -34,6 +35,7 @@ public :: ChkErr
 
 private :: State_getImport
 private :: State_setExport
+private :: State3d_setExport
 
 !> Get field pointer
 interface State_GetFldPtr
@@ -496,6 +498,17 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
 
+  ! -------
+  ! 3d potential temperature
+  ! -------
+  allocate(PT(isc:iec, jsc:jec, ocean_grid%ke))
+  call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+     call State3d_SetExport(exportState, 'tocn', &
+          isc, iec, jsc, jec, thermo_var_ptrs%T, ocean_grid, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  endif
+
   !----------------
   ! Sea-surface zonal and meridional slopes
   !----------------
@@ -811,6 +824,84 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 
   endif
 
+!> Map input array to export state
+subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocean_grid, areacor, rc)
+  type(ESMF_State)      , intent(inout) :: state   !< ESMF state
+  character(len=*)      , intent(in)    :: fldname !< Field name
+  integer             , intent(in)      :: isc     !< The start i-index of cell centers within
+                                                   !! the computational domain
+  integer             , intent(in)      :: iec     !< The end i-index of cell centers within the
+                                                   !! computational domain
+  integer             , intent(in)      :: jsc     !< The start j-index of cell centers within
+                                                   !! the computational domain
+  integer             , intent(in)      :: jec     !< The end j-index of cell centers within
+                                                   !! the computational domain
+  integer             , intent(in)      :: ke      !< The number of vertical levels
+  real (ESMF_KIND_R8)   , intent(in)    :: input(isc:iec,jsc:jec)!< Input 2D array
+  type(ocean_grid_type) , intent(in)    :: ocean_grid !< Ocean horizontal grid
+  real (ESMF_KIND_R8), optional,  intent(in) :: areacor(:) !< flux area correction factors
+                                                           !! applicable to meshes
+  integer               , intent(out)   :: rc         !< Return code
+
+  ! local variables
+  type(ESMF_StateItem_Flag)     :: itemFlag
+  integer                       :: n, i, j, i1, j1, ig,jg
+  integer                       :: lbnd1,lbnd2
+  real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
+  real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_setexport)'
+  ! ----------------------------------------------
+
+  rc = ESMF_SUCCESS
+
+  ! Indexing notes:
+  ! input array from "ocean_public" uses local indexing without halos
+  ! mask from "ocean_grid" uses local indexing with halos
+
+  call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+
+     if (geomtype == ESMF_GEOMTYPE_MESH) then
+
+        call state_getfldptr(state, trim(fldname), dataptr1d, rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+        n = 0
+        do j = jsc, jec
+           jg = j + ocean_grid%jsc - jsc
+           do i = isc, iec
+              ig = i + ocean_grid%isc - isc
+              n = n+1
+              dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
+           enddo
+        enddo
+        if (present(areacor)) then
+           do n = 1,(size(dataPtr1d))
+              dataPtr1d(n) = dataPtr1d(n) * areacor(n)
+           enddo
+        end if
+
+     else if (geomtype == ESMF_GEOMTYPE_GRID) then
+
+        call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+        lbnd1 = lbound(dataPtr2d,1)
+        lbnd2 = lbound(dataPtr2d,2)
+
+        do j = jsc, jec
+           j1 = j + lbnd2 - jsc
+           jg = j + ocean_grid%jsc - jsc
+           do i = isc, iec
+              i1 = i + lbnd1 - isc
+              ig = i + ocean_grid%isc - isc
+              dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
+           enddo
+        enddo
+
+     endif
+
+  endif
 end subroutine State_SetExport
 
 !> This subroutine writes the minimum, maximum and sum of each field
