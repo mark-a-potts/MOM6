@@ -513,6 +513,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   enddo 
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+     write(6,*) 'setting up tocn for export'
      call State3d_SetExport(exportState, 'tocn', &
           isc, iec, jsc, jec, ocean_grid%ke, PT, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -679,11 +680,13 @@ subroutine State_GetFldPtr_3d(State, fldname, fldptr, rc)
 
   ! local variables
   type(ESMF_Field) :: lfield
-  integer :: lrc
+  integer :: lrc, rank
   character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  call ESMF_FieldGet(lfield, rank=rank, rc=lrc)
+  write(6,*) 'HEY, rank for ',trim(fldname),' is ',rank, rc
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -894,7 +897,7 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
 
      if (geomtype == ESMF_GEOMTYPE_GRID) then
 
-        call state_getfldptr(state, trim(fldname), dataptr3d, rc)
+        call state_getfldptr(State, trim(fldname), dataptr3d, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
         lbnd1 = lbound(dataPtr3d,1)
@@ -906,7 +909,7 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
             enddo
           enddo
         enddo
-
+        write(6,*) 'HEY--',dataptr3d(isc:iec,jsc,5)
      endif
 
   endif
