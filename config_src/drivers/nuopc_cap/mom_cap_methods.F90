@@ -894,9 +894,10 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
 #if 1
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-
+     write(6,*) 'HEY! geomtype is ',geomtype
      if (geomtype == ESMF_GEOMTYPE_GRID) then
 
+        write(6,*) 'HEY! calling get fieldptr'
         call state_getfldptr(State, trim(fldname), dataptr3d, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
