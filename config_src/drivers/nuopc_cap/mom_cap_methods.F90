@@ -41,7 +41,7 @@ private :: State3d_setExport
 interface State_GetFldPtr
    module procedure State_GetFldPtr_1d
    module procedure State_GetFldPtr_2d
-   module procedure State_GetFldPtr_3d
+!  module procedure State_GetFldPtr_3d
 end interface
 
 integer                  :: import_cnt = 0!< used to skip using the import state
@@ -355,7 +355,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   real                            :: slope, u_min, u_max
   integer                         :: day, secs
   type(ESMF_TimeInterval)         :: timeStep
-  integer                         :: dt_int
+  integer                         :: dt_int,ii,jj
   real                            :: inv_dt_int  !< The inverse of coupling time interval in s-1.
   type(ESMF_StateItem_Flag)       :: itemFlag
   real(ESMF_KIND_R8), allocatable :: omask(:,:)
@@ -511,6 +511,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
        enddo 
     enddo 
   enddo 
+  write(6,*) 'in MOM, T(:,41,1)',ocean_state%MOM_CSp%T(isc:iec,jsc+40,1)
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      write(6,*) 'setting up tocn for export'
@@ -641,6 +642,7 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
   integer :: lrc
   character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
+! write(6,*) "HEYY in ",trim(subname),fldname
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
@@ -660,8 +662,9 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   ! local variables
   type(ESMF_Field) :: lfield
   integer :: lrc
-  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
+  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr2d)'
 
+! write(6,*) "HEYY in ",trim(subname),fldname
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
@@ -672,27 +675,28 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
 end subroutine State_GetFldPtr_2d
 
 !> Get field pointer 3D
-subroutine State_GetFldPtr_3d(State, fldname, fldptr, rc)
-  type(ESMF_State)            , intent(in)  :: State      !< ESMF state
-  character(len=*)            , intent(in)  :: fldname    !< Field name
-  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:,:)!< Pointer to the 3D field
-  integer, optional           , intent(out) :: rc         !< Return code
-
-  ! local variables
-  type(ESMF_Field) :: lfield
-  integer :: lrc, rank
-  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
-
-  call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  call ESMF_FieldGet(lfield, rank=rank, rc=lrc)
-  write(6,*) 'HEY, rank for ',trim(fldname),' is ',rank, rc
-  call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-  if (present(rc)) rc = lrc
-
-end subroutine State_GetFldPtr_3d
+!subroutine State_GetFldPtr_3d(State, fldname, fldptr, rc)
+!  type(ESMF_State)            , intent(in)  :: State      !< ESMF state
+!  character(len=*)            , intent(in)  :: fldname    !< Field name
+!  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:,:)!< Pointer to the 3D field
+!  integer, optional           , intent(out) :: rc         !< Return code
+!
+!  ! local variables
+!  type(ESMF_Field) :: lfield
+!  integer :: lrc, rank
+!  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr3d)'
+!
+!  write(6,*) "HEYY in ",trim(subname)
+!  call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
+!  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+!  call ESMF_FieldGet(lfield, rank=rank, rc=lrc)
+!  write(6,*) 'HEY, rank for ',trim(fldname),' is ',rank, rc
+!  call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
+!  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+!
+!  if (present(rc)) rc = lrc
+!
+!end subroutine State_GetFldPtr_3d
 
 !> Map import state field to output array
 subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
@@ -879,9 +883,10 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
-  integer                       :: n, i, j, i1, j1, ig,jg, k
+  integer                       :: n, i, j, i1, j1, ig,jg, k, ii, jj
   integer                       :: lbnd1,lbnd2
-  real(ESMF_KIND_R8), pointer   :: dataPtr3d(:,:,:)
+  real(ESMF_KIND_R8), pointer   :: dataPtr3d(:,:,:),dataPtr2d(:,:)
+  real(ESMF_KIND_R8), pointer   :: dataPtr(:)
   character(len=*)  , parameter :: subname='(MOM_cap_methods:state_setexport)'
   ! ----------------------------------------------
 
@@ -894,23 +899,24 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
 #if 1
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'HEY! geomtype is ',geomtype
+!    write(6,*) 'HEY! geomtype is ',geomtype
 !    if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-        write(6,*) 'HEY! calling get fieldptr',jsc,jec,isc,iec,ke
-        call state_getfldptr(State, trim(fldname), dataptr3d, rc)
+  !     write(6,*) 'HEY! calling get fieldptr',jsc,jec,isc,iec,ke
+        call state_getfldptr(State, trim(fldname), dataptr2d, rc)
+    !   call state_getfldptr(State, trim(fldname), dataptr3d, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-        lbnd1 = lbound(dataPtr3d,1)
-        lbnd2 = lbound(dataPtr3d,2)
         do k=1,ke
-          do j=jsc,jec
+          do j=jsc,jec 
+            jj = j - jsc 
             do i=isc,iec
-              dataptr3d(i,j,k) = input(i-isc+1,j-jsc+1,k)
+              ii = i - isc + 1
+              dataptr2d(jj*(iec-isc + 1)+ii,k) = input(i,j,k)
             enddo
           enddo
         enddo
-        write(6,*) 'HEY--',dataptr3d(isc:iec,jsc,5)
+!       write(6,*) 'HEY--',dataptr3d(isc:iec,jsc,5)
 !    endif
 
   endif

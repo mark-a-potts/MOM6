@@ -486,15 +486,11 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call ESMF_LogWrite(trim(subname)//': nthreads = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
 !$  call omp_set_num_threads(nthrds)
-  write(6,*) "HEY, calling fms_init from MOM"
   call fms_init(mpi_comm_mom)
   call mpp_init(mpi_comm_mom)
-  write(6,*) "HEY, calling constants_init from MOM"
   call constants_init
-  write(6,*) "HEY, calling fieldm_init from MOM"
   call field_manager_init
 
-  write(6,*) "HEY, done calling fieldm_init from MOM"
   ! determine the calendar
   if (cesm_coupled) then
      call NUOPC_CompAttributeGet(gcomp, name="calendar", value=cvalue, &
@@ -520,34 +516,26 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
      call set_calendar_type (JULIAN)
   endif
 
-  write(6,*) "HEY, calling diag_init from MOM"
   call diag_manager_init
-  write(6,*) "HEY, done calling diag_init from MOM"
 
   ! this ocean connector will be driven at set interval
   DT = set_time (DT_OCEAN, 0)
-  write(6,*) "HEY, done setting time"
   ! get current time
   time_start = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
-  write(6,*) "HEY, done getting time"
 
   if (is_root_pe()) then
     write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
 
   ! get start/reference time
-  write(6,*) "HEY, getting clock"
   call ESMF_ClockGet(CLOCK, refTime=MyTime, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  write(6,*) "HEY, getting TimeGet"
   call ESMF_TimeGet (MyTime, YY=YEAR, MM=MONTH, DD=DAY, H=HOUR, M=MINUTE, S=SECOND, RC=rc )
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  write(6,*) "HEY, getting set_date0"
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
-  write(6,*) "HEY, done getting set_date0"
   if (is_root_pe()) then
     write(logunit,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
@@ -556,22 +544,17 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
   !inst_name = "OCN"//trim(inst_suffix)
 
-  write(6,*) "HEY, reset shr logging"
   ! reset shr logging to my log file
   if (is_root_pe()) then
-     write(6,*) "HEY, attget1"
      call NUOPC_CompAttributeGet(gcomp, name="diro", &
           isPresent=isPresentDiro, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-     write(6,*) "HEY, attget2"
      call NUOPC_CompAttributeGet(gcomp, name="logfile", &
           isPresent=isPresentLogfile, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
      if (isPresentDiro .and. isPresentLogfile) then
-     write(6,*) "HEY, attget3"
           call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
-     write(6,*) "HEY, attget4"
           call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
           open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
@@ -582,7 +565,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
      logunit = output_unit
   endif
 
-  write(6,*) "HEY, done calling diro from MOM"
   starttype = ""
   call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, &
        isPresent=isPresent, isSet=isSet, rc=rc)
@@ -594,7 +576,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
           ESMF_LOGMSG_INFO)
   endif
 
-  write(6,*) "HEY, done calling start_type from MOM"
   runtype = ""
   if (trim(starttype) == trim('startup')) then
      runtype = "initial"
@@ -999,7 +980,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
      !---------------------------------
      ! Create a MOM6 mesh
      !---------------------------------
-
      call get_global_grid_size(ocean_grid, ni, nj)
      lsize = ( ocean_grid%iec - ocean_grid%isc + 1 ) * ( ocean_grid%jec - ocean_grid%jsc + 1 )
 
@@ -1024,6 +1004,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
      EMeshTemp = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
 
      if (localPet == 0) then
         write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
@@ -1094,10 +1075,10 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
      end do
 
      ! realize the import and export fields using the mesh
-     call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
+     call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-     call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, rc=rc)
+     call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      !---------------------------------
@@ -2077,7 +2058,7 @@ subroutine State_SetScalar(value, scalar_id, State, mytask, scalar_name, scalar_
 end subroutine State_SetScalar
 
 !> Realize the import and export fields using either a grid or a mesh.
-subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
+subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc)
   type(ESMF_State)    , intent(inout)        :: state !< ESMF_State object for
                                                       !! import/export fields.
   integer             , intent(in)           :: nfields !< Number of fields.
@@ -2086,20 +2067,22 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
   character(len=*)    , intent(in)           :: tag !< Import or export.
   type(ESMF_Grid)     , intent(in), optional :: grid!< ESMF grid.
   type(ESMF_Mesh)     , intent(in), optional :: mesh!< ESMF mesh.
+  integer             , intent(in), optional :: ke  !< vertical levels
   integer             , intent(inout)        :: rc  !< Return code.
 
   ! local variables
   integer                     :: i
   type(ESMF_Field)            :: field
+  type(ESMF_Field)            :: destfield
   real(ESMF_KIND_R8), pointer :: fldptr1d(:)   ! for mesh
   real(ESMF_KIND_R8), pointer :: fldptr2d(:,:) ! for grid
   character(len=*),parameter  :: subname='(MOM_cap:MOM_RealizeFields)'
   !--------------------------------------------------------
 
   rc = ESMF_SUCCESS
-
   do i = 1, nfields
 
+    write(6,*) 'HOOAA in realize fields with field ',field_defs(i)%shortname
     if (NUOPC_IsConnected(state, fieldName=field_defs(i)%shortname)) then
 
       if (field_defs(i)%shortname == scalar_field_name) then
@@ -2127,15 +2110,26 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
            fldptr2d(:,:) = 0.0
 
         else if (present(mesh)) then
+           if(field_defs(i)%shortname == 'tocn') then
+             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                  ungriddedLBound=(/1/), ungriddedUBound=(/75/),name=field_defs(i)%shortname, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-           field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
-                name=field_defs(i)%shortname, rc=rc)
-           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+             ! initialize fldptr to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+             fldptr2d(:,:) = 0.0
 
-           ! initialize fldptr to zero
-           call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
-           if (ChkErr(rc,__LINE__,u_FILE_u)) return
-           fldptr1d(:) = 0.0
+           else
+             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                  name=field_defs(i)%shortname, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+             ! initialize fldptr to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+             fldptr1d(:) = 0.0
+           endif
 
         endif
 
