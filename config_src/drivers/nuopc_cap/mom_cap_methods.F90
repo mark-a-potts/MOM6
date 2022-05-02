@@ -518,6 +518,13 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
           isc, iec, jsc, jec, ocean_grid%ke, PT, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
+  call ESMF_StateGet(exportState, 'socn', itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+     write(6,*) 'setting up socn for export'
+     call State3d_SetExport(exportState, 'socn', &
+          isc, iec, jsc, jec, ocean_grid%ke, PT, ocean_grid, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  endif
 
   !----------------
   ! Sea-surface zonal and meridional slopes
@@ -880,7 +887,6 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
   integer                       :: n, i, j, i1, j1, ig,jg, k
-  integer                       :: lbnd1,lbnd2
   real(ESMF_KIND_R8), pointer   :: dataPtr3d(:,:,:)
   character(len=*)  , parameter :: subname='(MOM_cap_methods:state_setexport)'
   ! ----------------------------------------------
@@ -894,15 +900,13 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
 #if 1
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'HEY! geomtype is ',geomtype
+!    write(6,*) 'HEY! geomtype is ',geomtype
 !    if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-        write(6,*) 'HEY! calling get fieldptr',jsc,jec,isc,iec,ke
+!       write(6,*) 'HEY! calling get fieldptr',jsc,jec,isc,iec,ke
         call state_getfldptr(State, trim(fldname), dataptr3d, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-        lbnd1 = lbound(dataPtr3d,1)
-        lbnd2 = lbound(dataPtr3d,2)
         do k=1,ke
           do j=jsc,jec
             do i=isc,iec
@@ -910,7 +914,7 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
             enddo
           enddo
         enddo
-        write(6,*) 'HEY--',dataptr3d(isc:iec,jsc,5)
+!       write(6,*) 'HEY--',dataptr3d(isc:iec,jsc,5)
 !    endif
 
   endif

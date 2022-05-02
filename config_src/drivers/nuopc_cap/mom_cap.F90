@@ -807,6 +807,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide")
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"                 , "will provide")
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "tocn"                       , "will provide")
+  call fld_list_add(fldsFrOcn_num, fldsFrOcn, "socn"                       , "will provide")
 
   do n = 1,fldsToOcn_num
     call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)%shortname, rc=rc)
