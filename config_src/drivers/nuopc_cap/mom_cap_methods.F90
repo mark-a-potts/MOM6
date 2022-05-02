@@ -516,16 +516,28 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      write(6,*) 'setting up tocn for export'
      call State3d_SetExport(exportState, 'tocn', &
-          isc, iec, jsc, jec, ocean_grid%ke, PT, ocean_grid, rc=rc)
+          isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%T, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
   call ESMF_StateGet(exportState, 'socn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      write(6,*) 'setting up socn for export'
      call State3d_SetExport(exportState, 'socn', &
-          isc, iec, jsc, jec, ocean_grid%ke, PT, ocean_grid, rc=rc)
+          isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%S, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
+  call ESMF_StateGet(exportState, 'uocn', itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+     write(6,*) 'setting up socn for export'
+     call State3d_SetExport(exportState, 'uocn', &
+          isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%u, ocean_grid, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  call ESMF_StateGet(exportState, 'vocn', itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+     write(6,*) 'setting up socn for export'
+     call State3d_SetExport(exportState, 'vocn', &
+          isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%v, ocean_grid, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----------------
   ! Sea-surface zonal and meridional slopes
