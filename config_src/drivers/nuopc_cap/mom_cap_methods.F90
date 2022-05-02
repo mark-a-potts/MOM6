@@ -532,12 +532,14 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
      call State3d_SetExport(exportState, 'uocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%u, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  endif
   call ESMF_StateGet(exportState, 'vocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      write(6,*) 'setting up socn for export'
      call State3d_SetExport(exportState, 'vocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%v, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  endif
 
   !----------------
   ! Sea-surface zonal and meridional slopes
