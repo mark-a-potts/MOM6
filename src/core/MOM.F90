@@ -540,19 +540,21 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   cycle_end = .true. ; if (present(end_cycle)) cycle_end = end_cycle
   cycle_time = time_interval ; if (present(cycle_length)) cycle_time = US%s_to_T*cycle_length
   therm_reset = cycle_start ; if (present(reset_therm)) therm_reset = reset_therm
-
+write(6,*) 'MOM step 1'
   call cpu_clock_begin(id_clock_ocean)
   call cpu_clock_begin(id_clock_other)
-
+  CS%debug = .true.
   if (CS%debug) then
     call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US)
   endif
 
   showCallTree = callTree_showQuery()
+  showCallTree = .true.
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
 
   ! Rotate the forces from G_in to G
   if (CS%rotate_index) then
+write(6,*) 'MOM step 2'
     turns = G%HI%turns
     allocate(forces)
     call allocate_mech_forcing(forces_in, G, forces)
@@ -562,6 +564,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call allocate_forcing_type(fluxes_in, G, fluxes)
     call rotate_forcing(fluxes_in, fluxes, turns)
   else
+write(6,*) 'MOM step 3'
     forces => forces_in
     fluxes => fluxes_in
   endif
@@ -570,19 +573,24 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   ! integer fraction of time_interval.
   if (do_dyn) then
     n_max = 1
+write(6,*) 'MOM step 4'
     if (time_interval > CS%dt) n_max = ceiling(time_interval/CS%dt - 0.001)
     dt = time_interval / real(n_max)
     thermo_does_span_coupling = (CS%thermo_spans_coupling .and. &
                                 (CS%dt_therm > 1.5*cycle_time))
+write(6,*) 'MOM step 5'
     if (thermo_does_span_coupling) then
+write(6,*) 'MOM step 6'
       ! Set dt_therm to be an integer multiple of the coupling time step.
       dt_therm = cycle_time * floor(CS%dt_therm / cycle_time + 0.001)
       ntstep = floor(dt_therm/dt + 0.001)
     elseif (.not.do_thermo) then
+write(6,*) 'MOM step 7'
       dt_therm = CS%dt_therm
       if (present(cycle_length)) dt_therm = min(CS%dt_therm, US%s_to_T*cycle_length)
       ! ntstep is not used.
     else
+write(6,*) 'MOM step 8'
       ntstep = MAX(1, MIN(n_max, floor(CS%dt_therm/dt + 0.001)))
       dt_therm = dt*ntstep
     endif
@@ -596,7 +604,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call cpu_clock_begin(id_clock_pass)
     if (.not.associated(forces%taux) .or. .not.associated(forces%tauy)) &
          call MOM_error(FATAL,'step_MOM:forces%taux,tauy not associated')
+write(6,*) 'MOM step 9'
     call create_group_pass(pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
+write(6,*) 'MOM step 10'
     if (associated(forces%ustar)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%ustar, G%Domain)
     if (associated(forces%p_surf)) &
@@ -610,6 +620,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   else
     ! This step only updates the thermodynamics so setting timesteps is simpler.
     n_max = 1
+write(6,*) 'MOM step 11'
     if ((time_interval > CS%dt_therm) .and. (CS%dt_therm > 0.0)) &
       n_max = ceiling(time_interval/CS%dt_therm - 0.001)
 
@@ -621,9 +632,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       if (CS%use_p_surf_in_EOS) CS%tv%p_surf => fluxes%p_surf
     endif
     if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)
+write(6,*) 'MOM step 12'
   endif
 
   if (therm_reset) then
+write(6,*) 'MOM step 13'
     CS%time_in_thermo_cycle = 0.0
     if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
@@ -632,6 +645,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   endif
 
   if (cycle_start) then
+write(6,*) 'MOM step 14'
     CS%time_in_cycle = 0.0
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
@@ -663,12 +677,14 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
 
     if (CS%UseWaves) then
+write(6,*) 'MOM step 15'
       ! Update wave information, which is presently kept static over each call to step_mom
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
       call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar)
       call disable_averaging(CS%diag)
     endif
   else ! not do_dyn.
+write(6,*) 'MOM step 16'
     if (CS%UseWaves) & ! Diagnostics are not enabled in this call.
       call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar)
   endif
@@ -700,6 +716,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     ! Update the vertically extensive diagnostic grids so that they are
     ! referenced to the beginning timestep
+write(6,*) 'MOM step 17'
     call diag_update_remap_grids(CS%diag, update_intensive = .false., update_extensive = .true. )
 
     !===========================================================================
@@ -736,6 +753,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
+write(6,*) 'MOM step 18'
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            end_time_thermo, .true., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
@@ -784,6 +802,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
 
       if (CS%interp_p_surf) then
+write(6,*) 'MOM step 19'
         wt_end = real(n) / real(n_max)
         wt_beg = real(n-1) / real(n_max)
         do j=jsd,jed ; do i=isd,ied
@@ -795,10 +814,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
 
 
+write(6,*) 'MOM step 20'
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
 
+write(6,*) 'MOM step 21'
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
 
@@ -867,10 +888,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       if (CS%IDs%id_ssh_inst > 0) call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
       call cpu_clock_end(id_clock_dynamics)
     endif
+write(6,*) 'MOM step 22'
 
     !===========================================================================
     ! Calculate diagnostics at the end of the time step if the state is self-consistent.
     if (MOM_state_is_synchronized(CS)) then
+write(6,*) 'MOM step 23'
     !### Perhaps this should be if (CS%t_dyn_rel_thermo == 0.0)
       call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
@@ -903,6 +926,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ssh(i,j) = CS%ssh_rint(i,j)*I_wt_ssh
       CS%ave_ssh_ibc(i,j) = ssh(i,j)
     enddo ; enddo
+write(6,*) 'MOM step 24'
     if (do_dyn) then
       call adjust_ssh_for_p_atm(CS%tv, G, GV, US, CS%ave_ssh_ibc, forces%p_surf_SSH, &
                                 CS%calc_rho_for_sea_lev)
@@ -931,6 +955,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
+write(6,*) 'MOM step 25'
     if (CS%rotate_index) then
       allocate(sfc_state_diag)
       call rotate_surface_state(sfc_state, G_in, sfc_state_diag, G, turns)
@@ -965,6 +990,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   call cpu_clock_end(id_clock_other)
 
   ! De-rotate fluxes and copy back to the input, since they can be changed.
+write(6,*) 'MOM step 26'
   if (CS%rotate_index) then
     call rotate_forcing(fluxes, fluxes_in, -turns)
     call rotate_mech_forcing(forces, -turns, forces_in)
@@ -1027,37 +1053,49 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   u => CS%u ; v => CS%v ; h => CS%h
   showCallTree = callTree_showQuery()
+  showCallTree = .true.
 
   call cpu_clock_begin(id_clock_dynamics)
 
+write(6,*) 'mom dyn 1'
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
+write(6,*) 'mom dyn 2'
     call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
+write(6,*) 'mom dyn 3'
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
+write(6,*) 'mom dyn 4'
     call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+write(6,*) 'mom dyn 5'
     call disable_averaging(CS%diag)
     if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
 
     ! Whenever thickness changes let the diag manager know, target grids
     ! for vertical remapping may need to be regenerated.
+write(6,*) 'mom dyn 6'
     call diag_update_remap_grids(CS%diag)
   endif
 
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
+write(6,*) 'mom dyn 7'
     call enable_averages(bbl_time_int, &
               Time_local + real_to_time(US%T_to_s*(bbl_time_int-dt)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
+write(6,*) 'mom dyn 8'
     call cpu_clock_begin(id_clock_BBL_visc)
+write(6,*) 'mom dyn 9'
     call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, &
                          CS%set_visc_CSp, symmetrize=.true.)
+write(6,*) 'mom dyn 11'
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
+write(6,*) 'mom dyn 12'
     call disable_averaging(CS%diag)
   endif
 
@@ -1074,7 +1112,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
         CS%dtbt_reset_time = CS%dtbt_reset_time + CS%dtbt_reset_interval
       endif
     endif
-
+write(6,*) 'mom dynb 1'
     call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                 p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                 CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
@@ -1090,10 +1128,12 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     ! useful for debugging purposes.
 
     if (CS%use_RK2) then
+write(6,*) 'mom dyn 1'
       call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
     else
+write(6,*) 'mom dyn 1'
       call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, Waves=Waves)
@@ -1109,11 +1149,13 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
+write(6,*) 'mom dyn 1'
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
     if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
     call cpu_clock_end(id_clock_thick_diff)
+write(6,*) 'mom dyn 1'
     call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
     if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
   endif
@@ -1139,10 +1181,12 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
+write(6,*) 'mom dyn 1'
   call diag_update_remap_grids(CS%diag)
 
   if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
                                          CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
+write(6,*) 'mom dyn 1'
   call disable_averaging(CS%diag)
 
   ! Advance the dynamics time by dt.
@@ -1164,6 +1208,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
   if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
   if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
+write(6,*) 'mom dyn 1'
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 

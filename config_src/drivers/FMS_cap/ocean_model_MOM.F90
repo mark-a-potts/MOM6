@@ -474,6 +474,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   integer :: is, ie, js, je
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
+ 
+  write(6,*)'update ocean 1' 
   dt_coupling = time_type_to_real(Ocean_coupling_time_step)
 
   if (.not.associated(OS)) then
@@ -500,10 +502,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
   ! This is benign but not necessary if ocean_model_init_sfc was called or if
   ! OS%sfc_state%tr_fields was spawned in ocean_model_init.  Consider removing it.
+  write(6,*)'update ocean 2' 
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
+  write(6,*)'update ocean 3' 
   ! Translate Ice_ocean_boundary into fluxes and forces.
   call get_domain_extent(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), index_bnds(3), index_bnds(4))
 
@@ -517,6 +521,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
   endif
 
+  write(6,*)'update ocean 4' 
   if (do_thermo) then
     if (OS%fluxes%fluxes_used) then
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, dt_coupling, &
@@ -538,6 +543,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       ! The previous fluxes have not been used yet, so translate the input fluxes
       ! into a temporary type and then accumulate them in about 20 lines.
       OS%flux_tmp%C_p = OS%fluxes%C_p
+  write(6,*)'update ocean 5' 
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, dt_coupling, &
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
@@ -556,6 +562,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   endif
 
   ! The net mass forcing is not currently used in the MOM6 dynamics solvers, so this is may be unnecessary.
+  write(6,*)'update ocean 6' 
   if (do_dyn .and. associated(OS%forces%net_mass_src) .and. .not.OS%forces%net_mass_src_set) &
     call get_net_mass_forcing(OS%fluxes, OS%grid, OS%US, OS%forces%net_mass_src)
 
@@ -566,6 +573,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves)
   endif
 
+  write(6,*)'update ocean 7' 
   if ((OS%nstep==0) .and. (OS%nstep_thermo==0)) then ! This is the first call to update_ocean_model.
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
@@ -578,11 +586,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
+  write(6,*)'update ocean 8' 
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
                   Waves=OS%Waves, do_dynamics=do_dyn, do_thermodynamics=do_thermo, &
                   start_cycle=start_cycle, end_cycle=end_cycle, cycle_length=cycle_length, &
                   reset_therm=Ocn_fluxes_used)
   elseif (OS%single_step_call) then
+  write(6,*)'update ocean 9' 
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else  ! Step both the dynamics and thermodynamics with separate calls.
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
@@ -599,6 +609,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
     Time1 = Time_seg_start ; t_elapsed_seg = 0.0
     do n=1,n_max
+  write(6,*)'update ocean 10' 
       if (OS%diabatic_first) then
         if (thermo_does_span_coupling) call MOM_error(FATAL, &
             "MOM is not yet set up to have restarts that work with "//&
@@ -659,9 +670,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
+  write(6,*)'update ocean 11' 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
   Time1 = OS%Time ; if (do_dyn) Time1 = OS%Time_dyn
+  write(6,*)'update ocean 12' 
   call coupler_type_send_data(Ocean_sfc%fields, Time1)
+  write(6,*)'update ocean 13' 
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model

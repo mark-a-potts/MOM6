@@ -176,6 +176,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     endif
   endif
 
+write(6,*) 'diffuse 1'
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
   Depth_scaled = .false.
@@ -194,6 +195,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
 
+write(6,*) 'diffuse 2'
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
   do j=js,je ; do I=is-1,ie
     KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
@@ -205,9 +207,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       (dt * (G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
 
+write(6,*) 'diffuse 3'
   ! Calculates interface heights, e, in [Z ~> m].
   call find_eta(h, tv, G, GV, US, e, halo_size=1)
 
+write(6,*) 'diffuse 4'
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
 !$OMP                               MEKE,Resoln_scaled,KH_u,G,use_QG_Leith,use_Visbeck,&
@@ -391,6 +395,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     enddo ; enddo ; enddo
   endif
 
+write(6,*) 'diffuse 5'
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
       if (CS%MEKE_GEOM_answers_2018) then
@@ -423,6 +428,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP end parallel
 
   if (CS%detangle_interfaces) then
+write(6,*) 'diffuse 6'
     call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, US, &
                            CS, int_slope_u, int_slope_v)
   endif
@@ -445,9 +451,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
   if (use_stored_slopes) then
+write(6,*) 'diffuse 7'
     call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
                                 int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
   else
+write(6,*) 'diffuse 8'
     call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
                                 int_slope_u, int_slope_v)
   endif
@@ -545,6 +553,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   ! This needs to happen after the H update and before the next post_data.
+write(6,*) 'diffuse 9'
   call diag_update_remap_grids(CS%diag)
 
   if (CS%debug) then
@@ -731,13 +740,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   find_work = .false.
   if (associated(MEKE)) find_work = associated(MEKE%GM_src)
   find_work = (associated(CS%GMwork) .or. find_work)
-
+write(6,*) 'full 2'
   if (use_EOS) then
     halo = 1 ! Default halo to fill is 1
     if (use_Stanley) halo = 2 ! Need wider valid halo for gradients of T
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, halo, larger_h_denom=.true.)
   endif
 
+write(6,*) 'full 3'
   if (CS%use_FGNV_streamfn .and. .not. associated(cg1)) call MOM_error(FATAL, &
        "cg1 must be associated when using FGNV streamfunction.")
 
@@ -832,6 +842,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio_u,hN2_u,   &
 !$OMP                                  Sfn_unlim_u,drdi_u,drdkDe_u,h_harm,c2_h_u,   &
 !$OMP                                  Sfn_safe,Sfn_est,Sfn_in_h,calc_derivatives)
+write(6,*) 'full 4'
   do j=js,je
     do I=is-1,ie ; hN2_u(I,1) = 0. ; hN2_u(I,nz+1) = 0. ; enddo
     do K=nz,2,-1
@@ -1086,6 +1097,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       enddo
     enddo ! end of k-loop
   enddo ! end of j-loop
+write(6,*) 'full 5'
 
     ! Calculate the meridional fluxes and gradients.
     EOSdom_v(:) = EOS_domain(G%HI)
@@ -1104,6 +1116,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio_v,hN2_v,   &
 !$OMP                                  Sfn_unlim_v,drdj_v,drdkDe_v,h_harm,c2_h_v,   &
 !$OMP                                  Sfn_safe,Sfn_est,Sfn_in_h,calc_derivatives)
+write(6,*) 'full 6'
   do J=js-1,je
     do K=nz,2,-1
       if (find_work .and. .not.(use_EOS)) then
@@ -1355,6 +1368,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       enddo
     enddo ! end of k-loop
   enddo ! end of j-loop
+write(6,*) 'full 7'
 
   ! In layer 1, enforce the boundary conditions that Sfn(z=0) = 0.0
   if (.not.find_work .or. .not.(use_EOS)) then
@@ -1391,6 +1405,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         endif
       enddo
     enddo
+write(6,*) 'full 8'
 
     EOSdom_v(:) = EOS_domain(G%HI)
     !$OMP parallel do default(shared) private(pres_v,T_v,S_v,drho_dT_v,drho_dS_v,drdjB)
@@ -1417,6 +1432,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       enddo
     enddo
   endif
+write(6,*) 'full 9'
 
   if (find_work) then ; do j=js,je ; do i=is,ie
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
@@ -1427,6 +1443,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
+write(6,*) 'full 10'
 
   if (find_work .and. CS%GM_src_alt .and. associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
     do j=js,je ; do i=is,ie ; do k=nz,1,-1
@@ -1438,11 +1455,17 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     enddo ; enddo ; enddo
   endif ; endif
 
+write(6,*) 'full 11'
   if (CS%id_slope_x > 0) call post_data(CS%id_slope_x, CS%diagSlopeX, CS%diag)
+write(6,*) 'full 12'
   if (CS%id_slope_y > 0) call post_data(CS%id_slope_y, CS%diagSlopeY, CS%diag)
+write(6,*) 'full 13'
   if (CS%id_sfn_x > 0) call post_data(CS%id_sfn_x, diag_sfn_x, CS%diag)
+write(6,*) 'full 14'
   if (CS%id_sfn_y > 0) call post_data(CS%id_sfn_y, diag_sfn_y, CS%diag)
+write(6,*) 'full 15'
   if (CS%id_sfn_unlim_x > 0) call post_data(CS%id_sfn_unlim_x, diag_sfn_unlim_x, CS%diag)
+write(6,*) 'full 16'
   if (CS%id_sfn_unlim_y > 0) call post_data(CS%id_sfn_unlim_y, diag_sfn_unlim_y, CS%diag)
 
 end subroutine thickness_diffuse_full
