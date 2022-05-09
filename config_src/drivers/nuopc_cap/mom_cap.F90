@@ -131,7 +131,7 @@ type (fld_list_type) :: fldsToOcn(fldsMax)
 integer              :: fldsFrOcn_num = 0
 type (fld_list_type) :: fldsFrOcn(fldsMax)
 
-integer              :: dbug = 0
+integer              :: dbug = 1
 integer              :: import_slice = 1
 integer              :: export_slice = 1
 character(len=256)   :: tmpstr
@@ -205,6 +205,7 @@ subroutine SetServices(gcomp, rc)
 
   call NUOPC_CompSpecialize(gcomp, specLabel=model_label_Advance, &
     specRoutine=ModelAdvance, rc=rc)
+  write(6,*) 'back from modelAdvance'
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_MethodRemove(gcomp, label=model_label_SetRunClock, rc=rc)
@@ -1573,9 +1574,12 @@ subroutine ModelAdvance(gcomp, rc)
 
   call ESMF_TimeGet(currTime,          timestring=import_timestr, rc=rc)
   call ESMF_TimeGet(currTime+timestep, timestring=export_timestr, rc=rc)
+  call ESMF_LogWrite("got time", ESMF_LOGMSG_INFO)
 
   Time_step_coupled = esmf2fms_time(timeStep)
+  call ESMF_LogWrite("called esfm2fms", ESMF_LOGMSG_INFO)
   Time = esmf2fms_time(currTime)
+  call ESMF_LogWrite("called esfm2fms again", ESMF_LOGMSG_INFO)
 
   !---------------
   ! Apply ocean lag for startup runs:
@@ -1608,20 +1612,27 @@ subroutine ModelAdvance(gcomp, rc)
 
   if (do_advance) then
 
+  call ESMF_LogWrite("in do advance", ESMF_LOGMSG_INFO)
      call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
+  call ESMF_LogWrite("in do advance 1", ESMF_LOGMSG_INFO)
      ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
+  call ESMF_LogWrite("in do advance 2", ESMF_LOGMSG_INFO)
      ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+  call ESMF_LogWrite("in do advance 3", ESMF_LOGMSG_INFO)
 
      !---------------
      ! Write diagnostics for import
      !---------------
 
      if (write_diagnostics) then
+  call ESMF_LogWrite("in do advance 4", ESMF_LOGMSG_INFO)
       do n = 1,fldsToOcn_num
+  call ESMF_LogWrite("in do advance, fldstoocn", ESMF_LOGMSG_INFO)
        fldname = fldsToOcn(n)%shortname
+       write(6,*) 'fldname is ',fldname
        call ESMF_StateGet(importState, itemName=trim(fldname), itemType=itemType, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -1645,12 +1656,14 @@ subroutine ModelAdvance(gcomp, rc)
      ! Get ocean grid
      !---------------
 
+  call ESMF_LogWrite("in do advance 5", ESMF_LOGMSG_INFO)
      call get_ocean_grid(ocean_state, ocean_grid)
 
      !---------------
      ! Import data
      !---------------
 
+  call ESMF_LogWrite("in do advance 6", ESMF_LOGMSG_INFO)
      call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -1658,15 +1671,19 @@ subroutine ModelAdvance(gcomp, rc)
      ! Update MOM6
      !---------------
 
+  call ESMF_LogWrite("in do advance 6.1", ESMF_LOGMSG_INFO)
      if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
      call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
+  call ESMF_LogWrite("in do advance 6.2", ESMF_LOGMSG_INFO)
      if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
      !---------------
      ! Export Data
      !---------------
 
+  call ESMF_LogWrite("in do advance 7", ESMF_LOGMSG_INFO)
      call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
+  call ESMF_LogWrite("in do advance 8", ESMF_LOGMSG_INFO)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      if (dbug > 0) then
@@ -1745,6 +1762,7 @@ subroutine ModelAdvance(gcomp, rc)
            write(restartname,'(A)')"MOM.res"
            write(stoch_restartname,'(A)')"ocn_stoch.res.nc"
         else
+  call ESMF_LogWrite("in do advance 9", ESMF_LOGMSG_INFO)
            write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
                 "MOM.res.", year, month, day, hour, minute, seconds
            write(stoch_restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
@@ -2085,7 +2103,7 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
   rc = ESMF_SUCCESS
   do i = 1, nfields
 
-    write(6,*) 'HOOAA in realize fields with field ',field_defs(i)%shortname
+ !  write(6,*) 'HOOAA in realize fields with field ',field_defs(i)%shortname,scalar_field_name
     if (NUOPC_IsConnected(state, fieldName=field_defs(i)%shortname)) then
 
       if (field_defs(i)%shortname == scalar_field_name) then
@@ -2113,7 +2131,8 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
            fldptr2d(:,:) = 0.0
 
         else if (present(mesh)) then
-           if(field_defs(i)%shortname == 'tocn') then
+           if((field_defs(i)%shortname == 'tocn').or.(field_defs(i)%shortname == 'socn').or. &
+              (field_defs(i)%shortname == 'vocn').or.(field_defs(i)%shortname == 'uocn')) then
              field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
                   ungriddedLBound=(/1/), ungriddedUBound=(/75/),name=field_defs(i)%shortname, rc=rc)
              if (ChkErr(rc,__LINE__,u_FILE_u)) return

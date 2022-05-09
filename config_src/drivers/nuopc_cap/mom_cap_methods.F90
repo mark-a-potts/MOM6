@@ -503,15 +503,15 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   ! -------
   ! 3d potential temperature
   ! -------
-  allocate(PT(isc:iec, jsc:jec, ocean_grid%ke))
-  do k = 1,ocean_grid%ke
-    do j = jsc,jec
-       do i = isc,iec
-         PT(i,j,k) =  ocean_state%MOM_CSp%T(i,j,k)
-       enddo 
-    enddo 
-  enddo 
-  write(6,*) 'in MOM, T(:,41,1)',ocean_state%MOM_CSp%T(isc:iec,jsc+40,1)
+! allocate(PT(isc:iec, jsc:jec, ocean_grid%ke))
+! do k = 1,ocean_grid%ke
+!   do j = jsc,jec
+!      do i = isc,iec
+!        PT(i,j,k) =  ocean_state%MOM_CSp%T(i,j,k)
+!      enddo 
+!   enddo 
+! enddo 
+! write(6,*) 'in MOM, T(:,41,1)',ocean_state%MOM_CSp%T(isc:iec,jsc+40,1)
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      write(6,*) 'setting up tocn for export'
@@ -525,20 +525,26 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
      call State3d_SetExport(exportState, 'socn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%S, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  else
+    write(6,*) "HEY!!! socn not found"
   endif
   call ESMF_StateGet(exportState, 'uocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'setting up socn for export'
+     write(6,*) 'setting up uocn for export'
      call State3d_SetExport(exportState, 'uocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%u, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  else
+    write(6,*) "HEY!!! uocn not found"
   endif
   call ESMF_StateGet(exportState, 'vocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'setting up socn for export'
+     write(6,*) 'setting up vocn for export'
      call State3d_SetExport(exportState, 'vocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%v, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  else
+    write(6,*) "HEY!!! vocn not found"
   endif
 
   !----------------
