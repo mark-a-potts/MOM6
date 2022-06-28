@@ -205,7 +205,6 @@ subroutine SetServices(gcomp, rc)
 
   call NUOPC_CompSpecialize(gcomp, specLabel=model_label_Advance, &
     specRoutine=ModelAdvance, rc=rc)
-  write(6,*) 'back from modelAdvance'
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_MethodRemove(gcomp, label=model_label_SetRunClock, rc=rc)
@@ -1632,7 +1631,6 @@ subroutine ModelAdvance(gcomp, rc)
       do n = 1,fldsToOcn_num
   call ESMF_LogWrite("in do advance, fldstoocn", ESMF_LOGMSG_INFO)
        fldname = fldsToOcn(n)%shortname
-       write(6,*) 'fldname is ',fldname
        call ESMF_StateGet(importState, itemName=trim(fldname), itemType=itemType, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -2103,7 +2101,6 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
   rc = ESMF_SUCCESS
   do i = 1, nfields
 
- !  write(6,*) 'HOOAA in realize fields with field ',field_defs(i)%shortname,scalar_field_name
     if (NUOPC_IsConnected(state, fieldName=field_defs(i)%shortname)) then
 
       if (field_defs(i)%shortname == scalar_field_name) then

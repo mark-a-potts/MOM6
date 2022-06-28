@@ -511,40 +511,29 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 !      enddo 
 !   enddo 
 ! enddo 
-! write(6,*) 'in MOM, T(:,41,1)',ocean_state%MOM_CSp%T(isc:iec,jsc+40,1)
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'setting up tocn for export'
      call State3d_SetExport(exportState, 'tocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%T, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
   call ESMF_StateGet(exportState, 'socn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'setting up socn for export'
      call State3d_SetExport(exportState, 'socn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%S, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  else
-    write(6,*) "HEY!!! socn not found"
   endif
   call ESMF_StateGet(exportState, 'uocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'setting up uocn for export'
      call State3d_SetExport(exportState, 'uocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%u, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  else
-    write(6,*) "HEY!!! uocn not found"
   endif
   call ESMF_StateGet(exportState, 'vocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-     write(6,*) 'setting up vocn for export'
      call State3d_SetExport(exportState, 'vocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%v, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  else
-    write(6,*) "HEY!!! vocn not found"
   endif
 
   !----------------
@@ -669,7 +658,6 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
   integer :: lrc
   character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
-! write(6,*) "HEYY in ",trim(subname),fldname
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
@@ -691,7 +679,6 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   integer :: lrc
   character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr2d)'
 
-! write(6,*) "HEYY in ",trim(subname),fldname
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
@@ -700,30 +687,6 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   if (present(rc)) rc = lrc
 
 end subroutine State_GetFldPtr_2d
-
-!> Get field pointer 3D
-!subroutine State_GetFldPtr_3d(State, fldname, fldptr, rc)
-!  type(ESMF_State)            , intent(in)  :: State      !< ESMF state
-!  character(len=*)            , intent(in)  :: fldname    !< Field name
-!  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:,:)!< Pointer to the 3D field
-!  integer, optional           , intent(out) :: rc         !< Return code
-!
-!  ! local variables
-!  type(ESMF_Field) :: lfield
-!  integer :: lrc, rank
-!  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr3d)'
-!
-!  write(6,*) "HEYY in ",trim(subname)
-!  call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
-!  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-!  call ESMF_FieldGet(lfield, rank=rank, rc=lrc)
-!  write(6,*) 'HEY, rank for ',trim(fldname),' is ',rank, rc
-!  call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
-!  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-!
-!  if (present(rc)) rc = lrc
-!
-!end subroutine State_GetFldPtr_3d
 
 !> Map import state field to output array
 subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
@@ -923,15 +886,9 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
   ! mask from "ocean_grid" uses local indexing with halos
 
   call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
-#if 1
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-!    write(6,*) 'HEY! geomtype is ',geomtype
-!    if (geomtype == ESMF_GEOMTYPE_MESH) then
-
-  !     write(6,*) 'HEY! calling get fieldptr',jsc,jec,isc,iec,ke
         call state_getfldptr(State, trim(fldname), dataptr2d, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
         do k=1,ke
           do j=jsc,jec 
             jj = j - jsc 
@@ -941,10 +898,7 @@ subroutine State3d_SetExport(state, fldname, isc, iec, jsc, jec, ke, input, ocea
             enddo
           enddo
         enddo
-!    endif
-
   endif
-#endif
 end subroutine State3d_SetExport
 
 !> This subroutine writes the minimum, maximum and sum of each field
