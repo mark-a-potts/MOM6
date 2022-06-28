@@ -36,6 +36,7 @@ public wave_structure, wave_structure_init
 
 !> The control structure for the MOM_wave_structure module
 type, public :: wave_structure_CS ; !private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
@@ -102,8 +103,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! gravity wave speed [L T-1 ~> m s-1].
   integer,                                  intent(in)  :: ModeNum !< Mode number
   real,                                     intent(in)  :: freq !< Intrinsic wave frequency [T-1 ~> s-1].
-  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned by a
-                                                              !! previous call to wave_structure_init.
+  type(wave_structure_CS),                  intent(inout) :: CS !< Wave structure control struct
   real, dimension(SZI_(G),SZJ_(G)), &
                                   optional, intent(in)  :: En !< Internal wave energy density [R Z3 T-2 ~> J m-2]
   logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
@@ -112,7 +112,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV)+1) :: &
     dRho_dT, &    !< Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    !< Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       !< Interface pressure [R L H T-2 ~> Pa]
+    pres, &       !< Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      !< Temperature interpolated to interfaces [degC]
     S_int, &      !< Salinity interpolated to interfaces [ppt]
     gprime        !< The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
@@ -128,8 +128,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     Hc, &         !< A column of layer thicknesses after convective instabilities are removed [Z ~> m]
     Tc, &         !< A column of layer temperatures after convective instabilities are removed [degC]
     Sc, &         !< A column of layer salinites after convective instabilities are removed [ppt]
-    Rc, &         !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
-    det, ddet
+    Rc            !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot              !< The vertical sum of the thicknesses [Z ~> m]
   real :: lam         !< inverse of wave speed squared [T2 L-2 ~> s2 m-2]
@@ -141,11 +140,9 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     HxT_here, &    !< A layer integrated temperature [degC Z ~> degC m]
     HxS_here, &    !< A layer integrated salinity [ppt Z ~> ppt m]
     HxR_here       !< A layer integrated density [R Z ~> kg m-2]
-  real :: speed2_tot
   real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum !< The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  !< G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
@@ -172,11 +169,11 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV))   :: dz           !< thicknesses of merged layers (same as Hc I hope) [Z ~> m]
   ! real, dimension(SZK_(GV)+1) :: dWdz_profile !< profile of dW/dz
   real                        :: w2avg   !< average of squared vertical velocity structure funtion [Z ~> m]
-  real                        :: int_dwdz2
-  real                        :: int_w2
-  real                        :: int_N2w2
-  real                        :: KE_term !< terms in vertically averaged energy equation
-  real                        :: PE_term !< terms in vertically averaged energy equation
+  real                        :: int_dwdz2 !< Vertical integral of the square of u_strct [Z ~> m]
+  real                        :: int_w2   !< Vertical integral of the square of w_strct [Z ~> m]
+  real                        :: int_N2w2 !< Vertical integral of N2 [Z T-2 ~> m s-2]
+  real                        :: KE_term !< terms in vertically averaged energy equation [R Z ~> kg m-2]
+  real                        :: PE_term !< terms in vertically averaged energy equation [R Z ~> kg m-2]
   real                        :: W0      !< A vertical velocity magnitude [Z T-1 ~> m s-1]
   real                        :: gp_unscaled !< A version of gprime rescaled to [L T-2 ~> m s-2].
   real, dimension(SZK_(GV)-1) :: lam_z   !< product of eigen value and gprime(k); one value for each
@@ -184,8 +181,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV)-1) :: a_diag, b_diag, c_diag
                                          !< diagonals of tridiagonal matrix; one value for each
                                          !< interface (excluding surface and bottom)
-  real, dimension(SZK_(GV)-1) :: e_guess !< guess at eigen vector with unit amplitde (for TDMA)
-  real, dimension(SZK_(GV)-1) :: e_itt   !< improved guess at eigen vector (from TDMA)
+  real, dimension(SZK_(GV)-1) :: e_guess !< guess at eigen vector with unit amplitude (for TDMA) [nondim]
+  real, dimension(SZK_(GV)-1) :: e_itt   !< improved guess at eigen vector (from TDMA) [nondim]
   real    :: Pi
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
@@ -193,10 +190,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   I_a_int = 1/a_int
 
-  !if (present(CS)) then
-    if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_structure: "// &
-           "Module must be initialized before it is used.")
-  !endif
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_structure: "// &
+         "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
@@ -204,7 +199,6 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
   Pi = (4.0*atan(1.0))
 
-  S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
 
   !if (CS%debug) call chksum0(g_Rho0, "g/rho0 in wave struct", &
@@ -242,12 +236,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxT_here(i) = (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
+          HxT_here(i) = (h(i,j,k) * GV%H_to_Z) * tv%T(i,j,k)
+          HxS_here(i) = (h(i,j,k) * GV%H_to_Z) * tv%S(i,j,k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
+          HxT_here(i) = HxT_here(i) + (h(i,j,k) * GV%H_to_Z) * tv%T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k) * GV%H_to_Z) * tv%S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -276,12 +270,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie ; if (cn(i,j)>0.0)then
+    do i=is,ie ; if (cn(i,j) > 0.0) then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
       !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
       !-----------------------------------
-      if (G%mask2dT(i,j) > 0.5) then
+      if (G%mask2dT(i,j) > 0.0) then
 
         gprime(:) = 0.0 ! init gprime
         pres(:) = 0.0 ! init pres
@@ -527,7 +521,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
             ! Back-calculate amplitude from energy equation
             if (present(En) .and. (freq**2*Kmag2 > 0.0)) then
-              ! Units here are [R
+              ! Units here are [R Z ~> kg m-2]
               KE_term = 0.25*GV%Rho0*( ((freq**2 + f2) / (freq**2*Kmag2))*int_dwdz2 + int_w2 )
               PE_term = 0.25*GV%Rho0*( int_N2w2 / freq**2 )
               if (En(i,j) >= 0.0) then
@@ -571,7 +565,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
       !else     ! if at test point - delete later
       !  return ! if at test point - delete later
       !endif    ! if at test point - delete later
-      endif ! mask2dT > 0.5?
+      endif ! mask2dT > 0.0?
     else
       ! if cn=0.0, default to zero
       nzm                       = nz+1! could use actual values
@@ -617,7 +611,6 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
                                           ! intermediate values for solvers
   real    :: Q_prime, beta                ! intermediate values for solver
   integer :: k                            ! row (e.g. interface) index
-  integer :: i,j
 
   nrow = size(y)
   allocate(c_prime(nrow))
@@ -727,8 +720,8 @@ subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
                                               !! parameters.
   type(diag_ctrl), target, intent(in) :: diag !< A structure that is used to regulate
                                               !! diagnostic output.
-  type(wave_structure_CS), pointer    :: CS   !< A pointer that is set to point to the
-                                              !! control structure for this module.
+  type(wave_structure_CS), intent(inout) :: CS  !< Wave structure control struct
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
@@ -736,11 +729,7 @@ subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "wave_structure_init called with an "// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
+  CS%initialized = .true.
 
   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)

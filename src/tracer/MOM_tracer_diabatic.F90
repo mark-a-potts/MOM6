@@ -35,17 +35,17 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
   real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
-                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU R Z T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
-                                                                     !! tracer in [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! tracer in [CU R Z T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
-                                                                     !! [CU kg m-2]; formerly [CU m]
+                                                                     !! [CU R Z ~> CU kg m-2]
   real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
-                                                                     !! [m T-1 ~> m s-1]
+                                                                     !! [Z T-1 ~> m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
@@ -83,7 +83,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%Z_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
   do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
@@ -91,7 +91,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     if (convert_flux) then
       !$OMP do
       do j=js,je ; do i=is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%RZ_to_H
       enddo ; enddo
     else
       !$OMP do
@@ -104,7 +104,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     if (convert_flux) then
       !$OMP do
       do j=js,je ; do i=is,ie
-        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
+        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%RZ_to_H
       enddo ; enddo
     else
       !$OMP do
@@ -147,14 +147,14 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       enddo
 
       ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ea(i,j,k) + sink(i,K)) + &
                     h_neglect
@@ -164,7 +164,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
                              (ea(i,j,k) + sink(i,K)) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ea(i,j,nz) + sink(i,nz)) + &
                     h_neglect
@@ -173,26 +173,25 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
-        btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
+      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+        btm_reservoir(i,j) = btm_reservoir(i,j) + (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_RZ
       endif ; enddo ; endif
 
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
   else
     !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = h_tr * b1(i)
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ea(i,j,k)
@@ -200,7 +199,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ea(i,j,nz)
@@ -208,7 +207,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
@@ -233,7 +232,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
   real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
-                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU R Z T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
@@ -241,9 +240,9 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
-                                                                     !! [CU kg m-2]; formerly [CU m]
+                                                                     !! [CU R Z ~> CU kg m-2]
   real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
-                                                                     !! [m T-1 ~> m s-1]
+                                                                     !! [Z T-1 ~> m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
@@ -282,7 +281,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%Z_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
   do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
@@ -290,7 +289,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
     if (convert_flux) then
       !$OMP do
       do j=js,je ; do i=is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%RZ_to_H
       enddo ; enddo
     else
       !$OMP do
@@ -346,14 +345,14 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
       enddo
 
       ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         b_denom_1 = h_minus_dsink(i,1) + ent(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = ent(i,j,K) * b1(i)
         b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ent(i,j,K) + sink(i,K)) + &
                     h_neglect
@@ -363,7 +362,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
                              (ent(i,j,K) + sink(i,K)) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = ent(i,j,nz) * b1(i)
         b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ent(i,j,nz) + sink(i,nz)) + &
                     h_neglect
@@ -372,26 +371,25 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               (ent(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
-        btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
+      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+        btm_reservoir(i,j) = btm_reservoir(i,j) + (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_RZ
       endif ; enddo ; endif
 
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
   else
     !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ent(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = h_tr * b1(i)
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = ent(i,j,K) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ent(i,j,K)
@@ -399,7 +397,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ent(i,j,K) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = ent(i,j,nz) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ent(i,j,nz)
@@ -407,7 +405,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ent(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
@@ -425,7 +423,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
   type(ocean_grid_type),                      intent(in   ) :: G  !< Grid structure
   type(verticalGrid_type),                    intent(in   ) :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: Tr !< Tracer concentration on T-cell
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: Tr !< Tracer concentration on T-cell [conc]
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied [T ~> s]
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -436,32 +434,38 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
                                                                   !! which fluxes can be applied [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that enters with freshwater
+                                                                  !! [conc H ~> conc m or conc kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that leaves with freshwater
+                                                                  !! [conc H ~> conc m or conc kg m-2]
   logical,                          optional, intent(in) :: update_h_opt  !< Optional flag to determine whether
                                                                   !! h should be updated
 
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-  real :: H_limit_fluxes, IforcingDepthScale
-  real :: dThickness, dTracer
-  real :: fractionOfForcing, hOld, Ithickness
-  real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
-  real, dimension(SZI_(G)) :: &
-    netMassInOut, &  ! surface water fluxes [H ~> m or kg m-2] over time step
-    netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
-    netMassOut       ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
+  real :: IforcingDepthScale ! The inverse of the scale over which to apply forcing [H-1 ~> m-1 or m2 kg-1]
+  real :: dThickness         ! The change in a layer's thickness [H ~> m or kg m-2]
+  real :: dTracer            ! The change in the integrated tracer content of a layer [conc H ~> conc m or conc kg m-2]
+  real :: fractionOfForcing  ! The fraction of the forcing to apply to a layer [nondim]
+  real :: hOld               ! The layer thickness before surface forcing is applied [H ~> m or kg m-2]
+  real :: Ithickness         ! The inverse of the new layer thickness [H-1 ~> m-1 or m2 kg-1]
 
-  real, dimension(SZI_(G),SZK_(GV)) :: h2d, Tr2d
-  real, dimension(SZI_(G),SZJ_(G))  :: in_flux  ! The total time-integrated amount of tracer!
-                                                   ! that enters with freshwater
-  real, dimension(SZI_(G),SZJ_(G))  :: out_flux ! The total time-integrated amount of tracer!
-                                                    ! that leaves with freshwater
-  real, dimension(SZI_(G))          :: in_flux_1d, out_flux_1d
-  real                              :: hGrounding(maxGroundings)
-  real    :: Tr_in
+  real :: h2d(SZI_(G),SZK_(GV))     ! A 2-d work copy of layer thicknesses [H ~> m or kg m-2]
+  real :: Tr2d(SZI_(G),SZK_(GV))    ! A 2-d work copy of tracer concentrations [conc]
+  real :: in_flux(SZI_(G),SZJ_(G))  ! The total time-integrated amount of tracer that
+                                    ! enters with freshwater [conc H ~> conc m or conc kg m-2]
+  real :: out_flux(SZI_(G),SZJ_(G)) ! The total time-integrated amount of tracer that
+                                    ! leaves with freshwater [conc H ~> conc m or conc kg m-2]
+  real :: netMassIn(SZI_(G))   ! The remaining mass entering ocean surface [H ~> m or kg m-2]
+  real :: netMassOut(SZI_(G))  ! The remaining mass leaving ocean surface [H ~> m or kg m-2]
+  real :: in_flux_1d(SZI_(G))  ! The remaining amount of tracer that enters with
+                               ! the freshwater [conc H ~> conc m or conc kg m-2]
+  real :: out_flux_1d(SZI_(G)) ! The remaining amount of tracer that leaves with
+                               ! the freshwater [conc H ~> conc m or conc kg m-2]
+  real :: hGrounding(maxGroundings) ! The remaining fresh water flux that was not able to be
+                               ! supplied from a column that grounded out [H ~> m or kg m-2]
   logical :: update_h
-  integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  integer :: i, j, is, ie, js, je, k, nz
   character(len=45) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -493,10 +497,9 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 !$OMP                                  IforcingDepthScale,minimum_forcing_depth, &
 !$OMP                                  numberOfGroundings,iGround,jGround,update_h, &
 !$OMP                                  in_flux,out_flux,hGrounding,evap_CFL_limit) &
-!$OMP                          private(h2d,Tr2d,netMassInOut,netMassOut,      &
+!$OMP                          private(h2d,Tr2d,netMassIn,netMassOut,      &
 !$OMP                                  in_flux_1d,out_flux_1d,fractionOfForcing,     &
-!$OMP                                  dThickness,dTracer,hOld,Ithickness,           &
-!$OMP                                  netMassIn, Tr_in)
+!$OMP                                  dThickness,dTracer,hOld,Ithickness)
 
   ! Work in vertical slices for efficiency
   do j=js,je
@@ -521,8 +524,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     ! Note here that the aggregateFW flag has already been taken care of in the call to
     ! applyBoundaryFluxesInOut
     do i=is,ie
-        netMassOut(i) = fluxes%netMassOut(i,j)
-        netMassIn(i)  = fluxes%netMassIn(i,j)
+      netMassOut(i) = fluxes%netMassOut(i,j)
+      netMassIn(i)  = fluxes%netMassIn(i,j)
     enddo
 
     ! Apply the surface boundary fluxes in three steps:
@@ -632,7 +635,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     if (numberOfGroundings - maxGroundings > 0) then
       write(mesg, '(i4)') numberOfGroundings - maxGroundings
       call MOM_error(WARNING, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
-                              trim(mesg) // " groundings remaining")
+                              trim(mesg) // " groundings remaining", all_print=.true.)
     endif
   endif
 

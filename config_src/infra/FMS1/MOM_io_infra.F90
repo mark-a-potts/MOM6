@@ -137,15 +137,12 @@ logical function MOM_file_exists(filename, MOM_Domain)
 end function MOM_file_exists
 
 !> Returns true if the named file or its domain-decomposed variant exists.
-logical function FMS_file_exists(filename, domain, no_domain)
+logical function FMS_file_exists(filename)
   character(len=*),         intent(in) :: filename  !< The name of the file being inquired about
-  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
-  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
-! This function uses the fms_io function file_exist to determine whether
-! a named file (or its decomposed variant) exists.
+  ! This function uses the fms_io function file_exist to determine whether
+  ! a named file (or its decomposed variant) exists.
 
-  FMS_file_exists = file_exist(filename, domain, no_domain)
-
+  FMS_file_exists = file_exist(filename)
 end function FMS_file_exists
 
 !> indicates whether an I/O handle is attached to an open file
@@ -718,9 +715,8 @@ subroutine read_field_4d(filename, fieldname, data, MOM_Domain, &
   ! Local variables
   character(len=80)  :: varname             ! The name of a variable in the file
   type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
-  logical :: use_fms_read_data, file_is_global
+  logical :: file_is_global
   integer :: n, unit, ndim, nvar, natt, ntime
-  integer :: is, ie, js, je
 
   ! This single call does not work for a 4-d array due to FMS limitations, so multiple calls are
   ! needed.

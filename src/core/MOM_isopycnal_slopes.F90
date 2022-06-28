@@ -98,19 +98,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1. [Z L-1 ~> nondim]
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [R2 Z-2 ~> kg2 m-8].
-  real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
-  real :: dz_neglect    ! A change in interface heighs that is so small it is usually lost
+  real :: dz_neglect    ! A change in interface heights that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   real :: G_Rho0        ! The gravitational acceleration divided by density [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
   real :: Z_to_L        ! A conversion factor between from units for e to the
-                        ! units for lateral distances.
+                        ! units for lateral distances [L Z-1 ~> 1]
   real :: L_to_Z        ! A conversion factor between from units for lateral distances
-                        ! to the units for e.
-  real :: H_to_Z        ! A conversion factor from thickness units to the units of e.
+                        ! to the units for e [Z L-1 ~> 1]
+  real :: H_to_Z        ! A conversion factor from thickness units to the units of e [Z H-1 ~> 1 or m3 kg-1]
 
   logical :: present_N2_u, present_N2_v
   integer, dimension(2) :: EOSdom_u, EOSdom_v ! Domains for the equation of state calculations at u and v points
@@ -219,7 +218,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdx,mag_grad2,slope,slope2_Ratio,l_seg)
+  !$OMP                                  drdx,mag_grad2,slope,l_seg)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -257,7 +256,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
       hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
       hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
       hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-      haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+      haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1)) + h_neglect
       haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
       haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
       haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
@@ -329,7 +328,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdy,mag_grad2,slope,slope2_Ratio,l_seg)
+  !$OMP                                  drdy,mag_grad2,slope,l_seg)
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
@@ -457,7 +456,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, lar
   real :: kap_dt_x2                ! The 2*kappa_dt converted to H units [H2 ~> m2 or kg2 m-4].
   real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to allow for zero thicknesses.
   real :: h0                       ! A negligible thickness to allow for zero thickness layers without
-                                   ! completely decouping groups of layers [H ~> m or kg m-2].
+                                   ! completely decoupling groups of layers [H ~> m or kg m-2].
                                    ! Often 0 < h_neglect << h0.
   real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
                                    ! added to ensure positive definiteness [H ~> m or kg m-2].

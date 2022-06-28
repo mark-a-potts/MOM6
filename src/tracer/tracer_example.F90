@@ -3,22 +3,25 @@ module USER_tracer_example
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coupler_types, only : set_coupler_type_data, atmos_ocn_coupler_flux
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : MOM_restart_CS
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type
+use MOM_coms,            only : EFP_type
+use MOM_coupler_types,   only : set_coupler_type_data, atmos_ocn_coupler_flux
+use MOM_diag_mediator,   only : diag_ctrl
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,    only : forcing
+use MOM_grid,            only : ocean_grid_type
+use MOM_hor_index,       only : hor_index_type
+use MOM_io,              only : file_exists, MOM_read_data, slasher
+use MOM_io,              only : vardesc, var_desc, query_vardesc
+use MOM_open_boundary,   only : ocean_OBC_type
+use MOM_restart,         only : MOM_restart_CS
+use MOM_spatial_means,   only : global_mass_int_EFP
+use MOM_sponge,          only : set_up_sponge_field, sponge_CS
+use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_unit_scaling,    only : unit_scale_type
+use MOM_variables,       only : surface
+use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
 
@@ -60,12 +63,12 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   type(tracer_registry_type), pointer   :: tr_Reg !< A pointer that is set to point to the control
                                                   !! structure for the tracer advection and
                                                   !! diffusion module
-  type(MOM_restart_CS),       pointer   :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS), intent(inout)   :: restart_CS !< MOM restart control struct
 
 ! Local variables
   character(len=80)  :: name, longname
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "tracer_example" ! This module's name.
   character(len=200) :: inputdir
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
@@ -134,13 +137,14 @@ end function USER_register_tracer_example
 
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
-subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine USER_initialize_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
@@ -156,14 +160,10 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 ! Local variables
   real, allocatable :: temp(:,:,:)
   character(len=32) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line [m2].
+  real :: dist2  ! The distance squared from a line [L2 ~> m2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB, lntr
 
@@ -196,9 +196,9 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !    This sets a stripe of tracer across the basin.
       PI = 4.0*atan(1.0)
       do j=js,je
-        dist2 = (G%Rad_Earth * PI / 180.0)**2 * &
+        dist2 = (G%Rad_Earth_L * PI / 180.0)**2 * &
                (G%geoLatT(i,j) - 40.0) * (G%geoLatT(i,j) - 40.0)
-        tr_y = 0.5*exp(-dist2/(1.0e5*1.0e5))
+        tr_y = 0.5 * exp( -dist2 / (1.0e5*US%m_to_L)**2 )
 
         do k=1,nz ; do i=is,ie
 !      This adds the stripes of tracer to every layer.
@@ -245,7 +245,8 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
-    do m=2,lntr
+    !do m=2,lntr
+    do m=2,ntr
       call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
       ! Steal from updated DOME in the fullness of time.
     enddo
@@ -282,10 +283,10 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, 
 
 ! Local variables
   real :: hold0(SZI_(G))       ! The original topmost layer thickness,
-                               ! with surface mass fluxes added back, m.
-  real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZI_(G),SZK_(GV)) ! tridiagonal solver.
-  real :: d1(SZI_(G))          ! d1=1-c1 is used by the tridiagonal solver.
+                               ! with surface mass fluxes added back [H ~> m or kg m-2].
+  real :: b1(SZI_(G))          ! b1 is a variable used by the tridiagonal solver [H ~> m or kg m-2].
+  real :: c1(SZI_(G),SZK_(GV)) ! c1 is a variable used by the tridiagonal solver [nondim].
+  real :: d1(SZI_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
   real :: h_neglect            ! A thickness that is so small it is usually lost
                                ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: b_denom_1 ! The first term in the denominator of b1 [H ~> m or kg m-2].
@@ -362,8 +363,8 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                              !! tracer, in kg times concentration units [kg conc].
+  type(EFP_type), dimension(:),       intent(out)   :: stocks !< The mass-weighted integrated amount of each
+                                                              !! tracer, in kg times concentration units [kg conc]
   type(USER_tracer_example_CS),       pointer       :: CS     !< The control structure returned by a
                                                               !! previous call to register_USER_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
@@ -374,9 +375,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
                                                               !! stocks calculated here.
 
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
-  integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  integer :: m
 
   USER_tracer_stock = 0
   if (.not.associated(CS)) return
@@ -388,15 +387,10 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,NTR
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="USER_tracer_stock")
     units(m) = trim(units(m))//" kg"
-    stocks(m) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
-    enddo ; enddo ; enddo
-    stocks(m) = stock_scale * stocks(m)
+    stocks(m) = global_mass_int_EFP(h, G, GV, CS%tr(:,:,:,m), on_PE_only=.true.)
   enddo
   USER_tracer_stock = NTR
 
@@ -438,7 +432,6 @@ end subroutine USER_tracer_surface_state
 subroutine USER_tracer_example_end(CS)
   type(USER_tracer_example_CS), pointer :: CS !< The control structure returned by a previous
                                               !! call to register_USER_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

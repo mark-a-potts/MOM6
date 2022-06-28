@@ -181,7 +181,7 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
                                nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new, &
                                h_neglect, h_neglect_edge)
   type(slight_CS),       intent(in)    :: CS    !< Coordinate control structure
-  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  type(EOS_type),        intent(in)    :: eqn_of_state !< Equation of state structure
   real,                  intent(in)    :: H_to_pres !< A conversion factor from thicknesses to
                                                 !! scaled pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
@@ -235,13 +235,11 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
   real :: Lfilt       ! A filtering lengthscale [H ~> m or kg m-2].
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
   logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
-  real :: k2_used, k2here, dz_sum, z_max
-  integer :: k2
   real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
   real, dimension(nz) :: c1  ! Temporary variables used by the tridiagonal solver.
   integer :: kur1, kur2  ! The indicies at the top and bottom of an unreliable region.
   integer :: kur_ss      ! The index to start with in the search for the next unstable region.
-  integer :: i, j, k, nkml
+  integer :: k, nkml
 
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)

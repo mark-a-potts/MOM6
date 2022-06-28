@@ -38,18 +38,11 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
                          intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   character(len=*),      intent(in)    :: filename !< The name of the file to read from
   character(len=*),      intent(in)    :: tr_name !< The name of the tracer in the file
-! type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   real,        optional, intent(in)    :: missing_val !< The missing value for the tracer
   real,        optional, intent(in)    :: land_val !< A value to use to fill in land points
 
-  !   This function initializes a tracer by reading a Z-space file, returning true if this
-  ! appears to have been successful, and false otherwise.
-!
-  integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "MOM_tracer_Z_init" ! This module's name.
-  character(len=256) :: mesg    ! Message for error messages.
 
   real, allocatable, dimension(:,:,:) :: &
     tr_in   ! The z-space array of tracer concentrations that is read in.
@@ -299,7 +292,6 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
   ! Local variables
   real, dimension(nk_data) :: tr_1d !< a copy of the input tracer concentrations in a column.
   real, dimension(nlay+1)  :: e_1d  ! A 1-d column of intreface heights, in the same units as e.
-  real, dimension(nlay)    :: tr_   ! A 1-d column of output tracer concentrations
   integer :: k_top, k_bot, k_bot_prev, kstart
   real    :: sl_tr    ! The tracer concentration slope times the layer thickness, in tracer units.
   real, dimension(nk_data) :: wt !< The fractional weight for each layer in the range between z1 and z2
@@ -398,12 +390,12 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   !   This subroutine reads the vertical coordinate data for a field from a
   ! NetCDF file.  It also might read the missing value attribute for that same field.
   character(len=32) :: mdl
-  character(len=120) :: dim_name, tr_msg, dim_msg
+  character(len=120) :: tr_msg, dim_msg
   character(:), allocatable :: edge_name
   character(len=256) :: dim_names(4)
   logical :: monotonic
-  integer :: ncid, status, intid, tr_id, layid, k
-  integer :: nz_edge, ndim, tr_dim_ids(8), sizes(4)
+  integer :: ncid, k
+  integer :: nz_edge, ndim, sizes(4)
 
   mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)
@@ -559,13 +551,13 @@ end function find_limited_slope
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, GV, US, &
-                                 eos, h_massless)
+                                 EOS, h_massless)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: temp !< potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(inout) :: salt !< salinity [PSU]
+                                 intent(inout) :: salt !< salinity [ppt]
   real, dimension(SZK_(GV)),     intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
@@ -575,7 +567,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
                                  intent(in)    :: h   !< layer thickness, used only to avoid working on
                                                       !! massless layers [H ~> m or kg m-2]
   type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
-  type(eos_type),                pointer       :: eos !< seawater equation of state control structure
+  type(EOS_type),                intent(in)    :: EOS !< seawater equation of state control structure
   real,                optional, intent(in)    :: h_massless !< A threshold below which a layer is
                                                       !! determined to be massless [H ~> m or kg m-2]
 
@@ -599,7 +591,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   real :: tol_rho  ! The tolerance for density matches [R ~> kg m-3]
   real :: max_t_adj, max_s_adj
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, k, kz, is, ie, js, je, nz, itt
+  integer :: i, j, k, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -627,9 +619,9 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
       do k=1,nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), EOS, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
-                                      eos, EOSdom )
+                                      EOS, EOSdom )
       enddo
       do k=k_start,nz ; do i=is,ie
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln) then
@@ -656,9 +648,9 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
 
     if (adjust_salt .and. old_fit) then ; do itt = 1,niter
       do k=1,nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), EOS, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
-                                      eos, EOSdom )
+                                      EOS, EOSdom )
       enddo
       do k=k_start,nz ; do i=is,ie
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then

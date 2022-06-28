@@ -39,8 +39,8 @@ implicit none ; private
 #define MAX_DSAMP_LEV 2
 
 public set_axes_info, post_data, register_diag_field, time_type
+public post_product_u, post_product_sum_u, post_product_v, post_product_sum_v
 public set_masks_for_axes
-public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, enable_averages, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
@@ -348,7 +348,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_null
   integer :: id_zl_native, id_zi_native
-  integer :: i, j, k, nz
+  integer :: i, j, nz
   real :: zlev(GV%ke), zinter(GV%ke+1)
   logical :: set_vert
   real, allocatable, dimension(:) :: IaxB,iax
@@ -586,7 +586,7 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
 
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
-  integer :: i, j, k, nz, dl
+  integer :: i, j, nz, dl
   real, dimension(:), pointer :: gridLonT_dsamp =>NULL()
   real, dimension(:), pointer :: gridLatT_dsamp =>NULL()
   real, dimension(:), pointer :: gridLonB_dsamp =>NULL()
@@ -754,7 +754,7 @@ subroutine set_masks_for_axes(G, diag_cs)
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
   ! Local variables
-  integer :: c, nk, i, j, k, ii, jj
+  integer :: c, nk, i, j, k
   type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
 
   do c=1, diag_cs%num_diag_coords
@@ -852,9 +852,8 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
   ! Local variables
-  integer :: c, nk, i, j, k, ii, jj
-  integer :: dl
-  type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
+  integer :: c, dl
+  type(axes_grp), pointer :: axes => NULL() ! Current axes, for convenience
 
   !Each downsampled axis needs both downsampled and non-downsampled mask
   !The downsampled mask is needed for sending out the diagnostics output via diag_manager
@@ -1377,7 +1376,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
-  integer :: isv, iev, jsv, jev, i, j, chksum, isv_o,jsv_o
+  integer :: isv, iev, jsv, jev, i, j, isv_o,jsv_o
   real, dimension(:,:), allocatable, target :: locfield_dsamp
   real, dimension(:,:), allocatable, target :: locmask_dsamp
   integer :: dl
@@ -1522,7 +1521,6 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
   ! Local variables
   type(diag_type), pointer :: diag => null()
-  integer :: nz, i, j, k
   real, dimension(:,:,:), allocatable :: remapped_field
   logical :: staggered_in_x, staggered_in_y
   real, dimension(:,:,:), pointer :: h_diag => NULL()
@@ -1647,7 +1645,6 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   logical :: is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c, isv_o,jsv_o
-  integer :: chksum
   real, dimension(:,:,:), allocatable, target :: locfield_dsamp
   real, dimension(:,:,:), allocatable, target :: locmask_dsamp
   integer :: dl
@@ -1801,6 +1798,108 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     deallocate( locfield )
 
 end subroutine post_data_3d_low
+
+!> Calculate and write out diagnostics that are the product of two 3-d arrays at u-points
+subroutine post_product_u(id, u_a, u_b, G, nz, diag, mask, alt_h)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_a  !< The first u-point array in arbitrary units [A]
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_b  !< The second u-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+  real,           optional, intent(in) :: mask(:,:,:)  !< If present, use this real array as the data mask [nondim]
+  real,   target, optional, intent(in) :: alt_h(:,:,:) !< An alternate thickness to use for vertically
+                                               !! remapping this diagnostic [H ~> m or kg m-2]
+
+  ! Local variables
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz) :: u_prod ! The product of u_a and u_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  do k=1,nz ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+    u_prod(I,j,k) = u_a(I,j,k) * u_b(I,j,k)
+  enddo ; enddo ; enddo
+  call post_data(id, u_prod, diag, mask=mask, alt_h=alt_h)
+
+end subroutine post_product_u
+
+!> Calculate and write out diagnostics that are the vertical sum of the product of two 3-d arrays at u-points
+subroutine post_product_sum_u(id, u_a, u_b, G, nz, diag)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_a  !< The first u-point array in arbitrary units [A]
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_b  !< The second u-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed) :: u_sum  ! The vertical sum of the product of u_a and u_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  u_sum(:,:) = 0.0
+  do k=1,nz ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+    u_sum(I,j) = u_sum(I,j) + u_a(I,j,k) * u_b(I,j,k)
+  enddo ; enddo ; enddo
+  call post_data(id, u_sum, diag)
+
+end subroutine post_product_sum_u
+
+!> Calculate and write out diagnostics that are the product of two 3-d arrays at v-points
+subroutine post_product_v(id, v_a, v_b, G, nz, diag, mask, alt_h)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_a  !< The first v-point array in arbitrary units [A]
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_b  !< The second v-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+  real,           optional, intent(in) :: mask(:,:,:)  !< If present, use this real array as the data mask [nondim]
+  real,   target, optional, intent(in) :: alt_h(:,:,:) !< An alternate thickness to use for vertically
+                                               !! remapping this diagnostic [H ~> m or kg m-2]
+
+  ! Local variables
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz) :: v_prod ! The product of v_a and v_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  do k=1,nz ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec
+    v_prod(i,J,k) = v_a(i,J,k) * v_b(i,J,k)
+  enddo ; enddo ; enddo
+  call post_data(id, v_prod, diag, mask=mask, alt_h=alt_h)
+
+end subroutine post_product_v
+
+!> Calculate and write out diagnostics that are the vertical sum of the product of two 3-d arrays at v-points
+subroutine post_product_sum_v(id, v_a, v_b, G, nz, diag)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_a  !< The first v-point array in arbitrary units [A]
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_b  !< The second v-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB) :: v_sum ! The vertical sum of the product of v_a and v_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  v_sum(:,:) = 0.0
+  do k=1,nz ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec
+    v_sum(i,J) = v_sum(i,J) + v_a(i,J,k) * v_b(i,J,k)
+  enddo ; enddo ; enddo
+  call post_data(id, v_sum, diag)
+
+end subroutine post_product_sum_v
 
 !> Post the horizontally area-averaged diagnostic
 subroutine post_xy_average(diag_cs, diag, field)
@@ -2132,7 +2231,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
     ! Register the native diagnostic
     if (associated(axes_d2)) then
-       active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
+      active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
                 init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2672,7 +2771,7 @@ end subroutine attach_cell_methods
 function register_scalar_field(module_name, field_name, init_time, diag_cs, &
             long_name, units, missing_value, range, standard_name, &
             do_not_log, err_msg, interp_method, cmor_field_name, &
-            cmor_long_name, cmor_units, cmor_standard_name)
+            cmor_long_name, cmor_units, cmor_standard_name, conversion)
   integer :: register_scalar_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
@@ -2693,6 +2792,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
   character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
   character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
 
   ! Local variables
   real :: MOM_missing_value
@@ -2723,6 +2823,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     call assert(associated(diag), 'register_scalar_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(conversion)) diag%conversion_factor = conversion
   endif
 
   if (present(cmor_field_name)) then
@@ -2753,6 +2854,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(conversion)) cmor_diag%conversion_factor = conversion
     endif
   endif
 
@@ -2809,7 +2911,7 @@ function register_static_field(module_name, field_name, axes, &
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
-  integer :: dm_id, fms_id, cmor_id
+  integer :: dm_id, fms_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
   character(len=9) :: axis_name
 
@@ -3626,7 +3728,7 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     mesg = '"'//trim(field_name)//'"  [Unused]'
   endif
   if (len(trim((comment)))>0) then
-    write(diag_CS%available_diag_doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
+    write(diag_CS%available_diag_doc_unit, '(a,1x,"(",a,")")') trim(mesg),trim(comment)
   else
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
@@ -3648,7 +3750,7 @@ subroutine log_chksum_diag(docunit, description, chksum)
   character(len=*), intent(in) :: description !< Name of the diagnostic module
   integer,          intent(in) :: chksum      !< chksum of the diagnostic
 
-  write(docunit, '(a,x,i9.8)') description, chksum
+  write(docunit, '(a,1x,i9.8)') description, chksum
   flush(docunit)
 
 end subroutine log_chksum_diag
@@ -3753,7 +3855,7 @@ end subroutine diag_restore_grids
 subroutine diag_grid_storage_end(grid_storage)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
   ! Local variables
-  integer :: m, nz
+  integer :: m
 
   ! Don't do anything else if there are no remapped coordinates
   if (grid_storage%num_diag_coords < 1) return
@@ -3776,7 +3878,7 @@ subroutine downsample_diag_masks_set(G, nz, diag_cs)
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
   ! Local variables
-  integer :: i,j,k,ii,jj,dl
+  integer :: k, dl
 
 !print*,'original c extents ',G%isc,G%iec,G%jsc,G%jec
 !print*,'original c extents ',G%iscb,G%iecb,G%jscb,G%jecb
@@ -4192,7 +4294,6 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   real :: ave, total_weight, weight
-  real :: epsilon = 1.0e-20  ! A negligibly small count of weights [nondim]
   real :: eps_area  ! A negligibly small area [L2 ~> m2]
   real :: eps_len   ! A negligibly small horizontal length [L ~> m]
 

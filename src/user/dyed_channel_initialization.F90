@@ -8,7 +8,7 @@ use MOM_error_handler,   only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_get_input,       only : directories
 use MOM_grid,            only : ocean_grid_type
-use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_open_boundary,   only : OBC_registry_type, register_OBC
 use MOM_time_manager,    only : time_type, time_type_to_real
@@ -93,10 +93,8 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
   ! Local variables
   character(len=40)  :: mdl = "dyed_channel_set_OBC_tracer_data" ! This subroutine's name.
   character(len=80)  :: name, longname
-  integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n
-  integer :: IsdB, IedB, JsdB, JedB
+  integer :: m, n
   real :: dye
-  type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
@@ -133,28 +131,27 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
 end subroutine dyed_channel_set_OBC_tracer_data
 
 !> This subroutine updates the long-channel flow
-subroutine dyed_channel_update_flow(OBC, CS, G, GV, Time)
+subroutine dyed_channel_update_flow(OBC, CS, G, GV, US, Time)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
   type(dyed_channel_OBC_CS),  pointer    :: CS  !< Dyed channel control structure.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in) :: US  !< A dimensional unit scaling type
   type(time_type),            intent(in) :: Time !< model time.
   ! Local variables
-  character(len=40)  :: mdl = "dyed_channel_update_flow" ! This subroutine's name.
-  character(len=80)  :: name
   real :: flow      ! The OBC velocity [L T-1 ~> m s-1]
   real :: PI        ! 3.1415926535...
   real :: time_sec  ! The elapsed time since the start of the calendar [T ~> s]
-  integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n
+  integer :: i, j, k, l, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_update_flow() was called but OBC type was not initialized!')
 
-  time_sec = G%US%s_to_T * time_type_to_real(Time)
+  time_sec = US%s_to_T * time_type_to_real(Time)
   PI = 4.0*atan(1.0)
 
   do l=1, OBC%number_of_segments

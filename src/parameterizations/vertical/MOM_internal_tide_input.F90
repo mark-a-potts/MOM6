@@ -34,6 +34,7 @@ public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
 !> This control structure holds parameters that regulate internal tide energy inputs.
 type, public :: int_tide_input_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: debug      !< If true, write verbose checksums for debugging.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                         !! regulate the timing of diagnostic output.
@@ -102,13 +103,16 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   logical :: avg_enabled  ! for testing internal tides (BDM)
   type(time_type) :: time_end        !< For use in testing internal tides (BDM)
 
-  integer :: i, j, k, is, ie, js, je, nz, isd, ied, jsd, jed
+  integer :: i, j, is, ie, js, je, nz, isd, ied, jsd, jed
   integer :: i_global, j_global
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   use_EOS = associated(tv%eqn_of_state)
@@ -181,7 +185,6 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
                                                                  !! smooth out the values in thin layers [ppt].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
   type(forcing),                             intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
-  type(int_tide_input_CS),                   pointer     :: CS   !<  This module's control structure.
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: N2_bot !< The squared buoyancy freqency at the
                                                                  !! ocean bottom [T-2 ~> s-2].
   ! Local variables
@@ -249,7 +252,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
     do i=is,ie
       hb(i) = 0.0 ; dRho_bot(i) = 0.0
       z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
-      do_i(i) = (G%mask2dT(i,j) > 0.5)
+      do_i(i) = (G%mask2dT(i,j) > 0.0)
       h_amp(i) = sqrt(h2(i,j))
     enddo
 
@@ -297,12 +300,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   type(int_tide_input_type), pointer       :: itide !< A structure containing fields related
                                                    !! to the internal tide sources.
   ! Local variables
-  type(vardesc) :: vd
   logical :: read_tideamp
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.
-  character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file
 
   real :: mask_itidal        ! A multiplicative land mask, 0 or 1 [nondim]
@@ -329,6 +330,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   endif
   allocate(CS)
   allocate(itide)
+
+  CS%initialized = .true.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed

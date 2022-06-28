@@ -73,7 +73,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
                                                                  !! call to CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
-  real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-2]
+  real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-1]
   real :: pref   ! Interface pressures [R L2 T-2 ~> Pa]
   real :: DU, DV ! Velocity differences [L T-1 ~> m s-1]
   real :: DZ     ! Grid spacing around an interface [Z ~> m]
@@ -326,9 +326,9 @@ logical function CVMix_shear_is_used(param_file)
   ! Local variables
   logical :: LMD94, PP81
   call get_param(param_file, mdl, "USE_LMD94", LMD94, &
-       default=.false., do_not_log = .true.)
+       default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "Use_PP81", PP81, &
-       default=.false., do_not_log = .true.)
+       default=.false., do_not_log=.true.)
   CVMix_shear_is_used = (LMD94 .or. PP81)
 end function CVMix_shear_is_used
 

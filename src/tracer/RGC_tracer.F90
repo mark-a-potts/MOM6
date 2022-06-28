@@ -72,7 +72,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(RGC_tracer_CS),        pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module (in/out).
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
 
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
@@ -172,19 +172,10 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                              !! sponges, if they are in use.  Otherwise this may be unassociated.
 
   real, allocatable :: temp(:,:,:)
-  real, pointer, dimension(:,:,:) :: &
-    OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
-    OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
-                           ! in through u- and v- points through the open
-                           ! boundary conditions, in the same units as tr.
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected [H ~> m or kg-2].
+                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer :: nzdata
@@ -337,7 +328,6 @@ end subroutine RGC_tracer_column_physics
 
 subroutine RGC_tracer_end(CS)
   type(RGC_tracer_CS), pointer :: CS !< The control structure returned by a previous call to RGC_register_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

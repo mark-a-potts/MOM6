@@ -92,23 +92,21 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric)
                                    intent(in) :: v  !< Meridional velocity [L T-1 ~> m s-1] or [m s-1]..
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                                    intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type, which is
+  type(unit_scale_type),            intent(in) :: US !< A dimensional unit scaling type, which is
                                                     !! used to rescale u and v if present.
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,               optional, intent(in) :: symmetric !< If true, do checksums on the fully
                                                     !! symmetric computational domain.
-  real :: L_T_to_m_s ! A rescaling factor for velocities [m T s-1 L-1 ~> nondim] or [nondim]
+
   integer :: hs
   logical :: sym
-
-  L_T_to_m_s = 1.0 ; if (present(US)) L_T_to_m_s = US%L_T_to_m_s
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   hs = 1 ; if (present(haloshift)) hs = haloshift
   sym = .false. ; if (present(symmetric)) sym = symmetric
-  call uvchksum(mesg//" u", u, v, G%HI, haloshift=hs, symmetric=sym, scale=L_T_to_m_s)
+  call uvchksum(mesg//" u", u, v, G%HI, haloshift=hs, symmetric=sym, scale=US%L_T_to_m_s)
   call hchksum(h, mesg//" h",G%HI, haloshift=hs, scale=GV%H_to_m)
 end subroutine MOM_state_chksum_3arg
 
@@ -255,8 +253,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: &
     tmp_A, &  ! The area per cell [m2] (unscaled to permit reproducing sum).
     tmp_V, &  ! The column-integrated volume [m3] (unscaled to permit reproducing sum)
-    tmp_T, &  ! The column-integrated temperature [degC m3]
-    tmp_S     ! The column-integrated salinity [ppt m3]
+    tmp_T, &  ! The column-integrated temperature [degC m3] (unscaled to permit reproducing sum)
+    tmp_S     ! The column-integrated salinity [ppt m3] (unscaled to permit reproducing sum)
   real :: Vol, dV    ! The total ocean volume and its change [m3] (unscaled to permit reproducing sum).
   real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
   real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
@@ -296,6 +294,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
         T%average = T%average + dV*Temp(i,j,k)
         S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
         S%average = S%average + dV*Salt(i,j,k)
+        tmp_T(i,j) = tmp_T(i,j) + dV*Temp(i,j,k)
+        tmp_S(i,j) = tmp_S(i,j) + dV*Salt(i,j,k)
       endif
       if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif

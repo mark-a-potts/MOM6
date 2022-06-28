@@ -41,8 +41,6 @@ subroutine Neverworld_initialize_topography(D, G, param_file, max_depth)
 
   ! Local variables
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
-  real :: D0                   ! A constant to make the maximum     !
-                               ! basin depth MAXIMUM_DEPTH.         !
   real :: x, y
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -167,7 +165,6 @@ real function dist_line_fixed_y(x, y, x0, x1, y0)
   real, intent(in) :: x0      !< x-position of line segment end[nondim]
   real, intent(in) :: x1      !< x-position of line segment end[nondim]
   real, intent(in) :: y0      !< y-position of line segment [nondim]
-  real :: dx, yr, dy
 
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y
@@ -239,7 +236,7 @@ end function circ_ridge
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, eqn_of_state, P_ref)
+subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
@@ -250,7 +247,6 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
-  type(EOS_type),          pointer    :: eqn_of_state         !< Equation of state structure
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure [R L2 T-2 ~> Pa].
   ! Local variables
@@ -264,7 +260,7 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
   real :: noise ! Noise
   type(randomNumberStream) :: rns ! Random numbers for stochastic tidal parameterization
   character(len=40)  :: mdl = "Neverworld_initialize_thickness" ! This subroutine's name.
-  integer :: i, j, k, k1, is, ie, js, je, nz, itt
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

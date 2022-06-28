@@ -69,7 +69,6 @@ type :: p3d
   integer :: id !< id for FMS external time interpolator
   integer :: nz_data !< The number of vertical levels in the input field.
   integer :: num_tlevs !< The number of time records contained in the file
-  real, dimension(:,:,:), pointer :: mask_in => NULL() !< pointer to the data mask.
   real, dimension(:,:,:), pointer :: p => NULL() !< pointer to the data.
   real, dimension(:,:,:), pointer :: h => NULL() !< pointer to the data grid.
 end type p3d
@@ -79,7 +78,6 @@ type :: p2d
   integer :: id !< id for FMS external time interpolator
   integer :: nz_data !< The number of vertical levels in the input field
   integer :: num_tlevs !< The number of time records contained in the file
-  real, dimension(:,:), pointer :: mask_in => NULL()!< pointer to the data mask.
   real, dimension(:,:), pointer :: p => NULL() !< pointer the data.
   real, dimension(:,:), pointer :: h => NULL() !< pointer the data grid.
 end type p2d
@@ -94,16 +92,16 @@ type, public :: ALE_sponge_CS ; private
   integer :: fldno = 0 !< The number of fields which have already been
                        !! registered by calls to set_up_sponge_field
   logical :: sponge_uv !< Control whether u and v are included in sponge
-  integer, pointer :: col_i(:) => NULL()   !< Array of the i-indices of each tracer column being damped.
-  integer, pointer :: col_j(:) => NULL()   !< Array of the j-indices of each tracer column being damped.
-  integer, pointer :: col_i_u(:) => NULL() !< Array of the i-indices of each u-column being damped.
-  integer, pointer :: col_j_u(:) => NULL() !< Array of the j-indices of each u-column being damped.
-  integer, pointer :: col_i_v(:) => NULL() !< Array of the i-indices of each v-column being damped.
-  integer, pointer :: col_j_v(:) => NULL() !< Array of the j-indices of each v-column being damped.
+  integer, allocatable :: col_i(:)    !< Array of the i-indices of each tracer column being damped
+  integer, allocatable :: col_j(:)    !< Array of the j-indices of each tracer column being damped
+  integer, allocatable :: col_i_u(:)  !< Array of the i-indices of each u-column being damped
+  integer, allocatable :: col_j_u(:)  !< Array of the j-indices of each u-column being damped
+  integer, allocatable :: col_i_v(:)  !< Array of the i-indices of each v-column being damped
+  integer, allocatable :: col_j_v(:)  !< Array of the j-indices of each v-column being damped
 
-  real, pointer :: Iresttime_col(:)   => NULL() !< The inverse restoring time of each tracer column [T-1 ~> s-1].
-  real, pointer :: Iresttime_col_u(:) => NULL() !< The inverse restoring time of each u-column [T-1 ~> s-1].
-  real, pointer :: Iresttime_col_v(:) => NULL() !< The inverse restoring time of each v-column [T-1 ~> s-1].
+  real, allocatable :: Iresttime_col(:)   !< The inverse restoring time of each tracer column [T-1 ~> s-1]
+  real, allocatable :: Iresttime_col_u(:) !< The inverse restoring time of each u-column [T-1 ~> s-1]
+  real, allocatable :: Iresttime_col_v(:) !< The inverse restoring time of each v-column [T-1 ~> s-1]
 
   type(p3d) :: var(MAX_FIELDS_)      !< Pointers to the fields that are being damped.
   type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
@@ -145,7 +143,7 @@ contains
 
 !> This subroutine determines the number of points which are within sponges in this computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
-!! points are included in the sponges.  It also stores the target interface heights. This
+!! points are included in the sponges.  It also stores the target interface heights.
 subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h, nz_data, &
                                         Iresttime_u_in, Iresttime_v_in)
 
@@ -165,16 +163,18 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                                                                              ! time at v-points [T-1 ~> s-1].
 
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
-  logical :: use_sponge
   real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=64)  :: remapScheme
+  logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   logical :: default_2018_answers
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
-  character(len=10)  :: remapScheme
+
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE_sponge_fixed called with an associated "// &
                             "control structure.")
@@ -230,7 +230,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
   ! number of columns to be restored
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) &
+    if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) &
       CS%num_col = CS%num_col + 1
   enddo ; enddo
 
@@ -241,7 +241,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
+      if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
         CS%Iresttime_col(col) = Iresttime(i,j)
         col = col +1
@@ -275,15 +275,15 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
     ! u points
     CS%num_col_u = 0 ;
     if (present(Iresttime_u_in)) then
-       Iresttime_u(:,:) = Iresttime_u_in(:,:)
+      Iresttime_u(:,:) = Iresttime_u_in(:,:)
     else
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
         Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
       enddo ; enddo
     endif
     do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-       if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
-          CS%num_col_u = CS%num_col_u + 1
+      if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) &
+        CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
 
     if (CS%num_col_u > 0) then
@@ -295,7 +295,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       ! Store the column indices and restoring rates in the CS structure
       col = 1
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-        if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
+        if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) then
           CS%col_i_u(col) = I ; CS%col_j_u(col) = j
           CS%Iresttime_col_u(col) = Iresttime_u(I,j)
           col = col + 1
@@ -326,7 +326,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       enddo ; enddo
     endif
     do J=G%jscB,G%jecB; do i=G%isc,G%iec
-      if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
+      if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) &
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
 
@@ -339,7 +339,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       ! pass indices, restoring time to the CS structure
       col = 1
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
+        if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
           CS%Iresttime_col_v(col) = Iresttime_v(i,j)
           col = col + 1
@@ -366,15 +366,10 @@ end subroutine initialize_ALE_sponge_fixed
 !> Return the number of layers in the data with a fixed ALE sponge, or 0 if there are
 !! no sponge columns on this PE.
 function get_ALE_sponge_nz_data(CS)
-  type(ALE_sponge_CS),   pointer       :: CS !< A pointer that is set to point to the control
-                                             !! structure for the ALE_sponge module.
+  type(ALE_sponge_CS), intent(in) :: CS !< ALE sponge control struct
   integer :: get_ALE_sponge_nz_data  !< The number of layers in the fixed sponge data.
 
-  if (associated(CS)) then
-    get_ALE_sponge_nz_data = CS%nz_data
-  else
-    get_ALE_sponge_nz_data = 0
-  endif
+  get_ALE_sponge_nz_data = CS%nz_data
 end function get_ALE_sponge_nz_data
 
 !> Return the thicknesses used for the data with a fixed ALE sponge
@@ -429,17 +424,17 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   real, dimension(SZI_(G),SZJB_(G)), intent(in), optional :: Iresttime_v_in !< The inverse of the restoring time
                                                                             !! for v [T-1 ~> s-1].
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
-  logical :: use_sponge
   real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=64)  :: remapScheme
+  logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   logical :: default_2018_answers
-  logical :: spongeDataOngrid = .false.
-  integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
-  character(len=10)  :: remapScheme
+  integer :: i, j, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE_sponge_varying called with an associated "// &
@@ -496,7 +491,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   ! number of columns to be restored
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) &
+    if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) &
       CS%num_col = CS%num_col + 1
   enddo ; enddo
   if (CS%num_col > 0) then
@@ -506,7 +501,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
+      if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
         CS%Iresttime_col(col) = Iresttime(i,j)
         col = col + 1
@@ -536,7 +531,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
     endif
     CS%num_col_u = 0 ;
     do j=G%jsc,G%jec; do I=G%iscB,G%iecB
-      if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
+      if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) &
         CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
     if (CS%num_col_u > 0) then
@@ -546,7 +541,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
       ! pass indices, restoring time to the CS structure
       col = 1
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-        if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
+        if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) then
           CS%col_i_u(col) = i ; CS%col_j_u(col) = j
           CS%Iresttime_col_u(col) = Iresttime_u(i,j)
           col = col + 1
@@ -568,7 +563,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
     endif
     CS%num_col_v = 0 ;
     do J=G%jscB,G%jecB; do i=G%isc,G%iec
-      if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
+      if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) &
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
     if (CS%num_col_v > 0) then
@@ -578,7 +573,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
       ! pass indices, restoring time to the CS structure
       col = 1
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
+        if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
           CS%Iresttime_col_v(col) = Iresttime_v(i,j)
           col = col + 1
@@ -600,10 +595,8 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS, US)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(ALE_sponge_CS),     pointer       :: CS   !< ALE sponge control structure
+  type(ALE_sponge_CS),     intent(inout) :: CS   !< ALE sponge control structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-
-  if (.not.associated(CS)) return
 
   CS%diag => diag
 
@@ -634,7 +627,7 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                    target, intent(in) :: f_ptr !< Pointer to the field to be damped
 
-  integer :: j, k, col
+  integer :: k, col
   character(len=256) :: mesg ! String for error messages
 
   if (.not.associated(CS)) return
@@ -676,19 +669,11 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   type(ALE_sponge_CS),     pointer    :: CS    !< Sponge control structure (in/out).
 
   ! Local variables
-  real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
-  real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
-  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights [Z ~> m].
-  real :: missing_value
-  integer :: j, k, col
-  integer :: isd,ied,jsd,jed
-  integer :: nPoints
+  integer :: isd, ied, jsd, jed
   integer, dimension(4) :: fld_sz
   integer :: nz_data !< the number of vertical levels in this input field
   character(len=256) :: mesg ! String for error messages
   ! Local variables for ALE remapping
-  real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
-  type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return
   ! initialize time interpolator module
@@ -697,7 +682,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   CS%fldno = CS%fldno + 1
   if (CS%fldno > MAX_FIELDS_) then
     write(mesg, '("Increase MAX_FIELDS_ to at least ",I3," in MOM_memory.h or decrease "//&
-           "the number of fields to be damped in the call to initialize_ALE_sponge." )') CS%fldno
+        &"the number of fields to be damped in the call to initialize_ALE_sponge." )') CS%fldno
     call MOM_error(FATAL,"set_up_ALE_sponge_field: "//mesg)
   endif
   ! get a unique time interp id for this field. If sponge data is on-grid, then setup
@@ -737,8 +722,7 @@ subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, GV, u_ptr, v_ptr, 
   real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in) :: u_ptr !< u-field to be damped [L T-1 ~> m s-1]
   real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: v_ptr !< v-field to be damped [L T-1 ~> m s-1]
 
-  integer :: j, k, col, fld_sz(4)
-  character(len=256) :: mesg ! String for error messages
+  integer :: k, col
 
   if (.not.associated(CS)) return
 
@@ -777,19 +761,10 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: v_ptr !< v-field to be damped [L T-1 ~> m s-1]
 
   ! Local variables
-  real, allocatable, dimension(:,:,:) :: u_val !< U field to be used in the sponge [L T-1 ~> m s-1].
-  real, allocatable, dimension(:,:,:) :: v_val !< V field to be used in the sponge [L T-1 ~> m s-1].
-
-  real, allocatable, dimension(:), target :: z_in, z_edges_in
-  real :: missing_value
   logical :: override
-
-  integer :: j, k, col
   integer :: isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
   integer, dimension(4) :: fld_sz
-  character(len=256) :: mesg ! String for error messages
-  integer :: tmp
   if (.not.associated(CS)) return
 
   override =.true.
@@ -840,11 +815,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real,                      intent(in)    :: dt !< The amount of time covered by this call [T ~> s].
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_ALE_sponge (in).
-  type(time_type), optional, intent(in)    :: Time !< The current model date
+  type(time_type),           intent(in)    :: Time !< The current model date
 
   real :: damp                                  ! The timestep times the local damping coefficient [nondim].
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
-  real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
@@ -858,8 +832,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, dimension(:), allocatable :: hsrc       ! Source thicknesses [Z ~> m].
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: tmpT1d
-  integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
-  integer :: col, total_sponge_cols
+  integer :: c, m, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in  ! The depths (positive downward) in the input file [Z ~> m]
   real, allocatable, dimension(:), target :: z_edges_in ! The depths (positive downward) of the
                                                         ! edges in the input file [Z ~> m]
@@ -885,8 +858,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   endif
 
   if (CS%time_varying_sponges) then
-    if (.not. present(Time)) &
-      call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
@@ -971,12 +942,9 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   if (CS%sponge_uv) then
 
     if (CS%time_varying_sponges) then
-      if (.not. present(Time)) &
-         call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
-
       nz_data = CS%Ref_val_u%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, US%m_s_to_L_T, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
@@ -1025,7 +993,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, US%m_s_to_L_T, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
@@ -1282,8 +1250,7 @@ end subroutine rotate_ALE_sponge
 !   after rotation.  This function is part of a temporary solution until
 !   something more robust is developed.
 subroutine update_ALE_sponge_field(sponge, p_old, G, GV, p_new)
-  type(ALE_sponge_CS),     pointer    :: sponge !< A pointer to the control structure for this module
-                                               !! that is set by a previous call to initialize_ALE_sponge.
+  type(ALE_sponge_CS),     intent(inout) :: sponge !< ALE sponge control struct
   real, dimension(:,:,:), &
                    target, intent(in) :: p_old !< The previous array of target values
   type(ocean_grid_type),   intent(in) :: G     !< The updated ocean grid structure
@@ -1296,7 +1263,6 @@ subroutine update_ALE_sponge_field(sponge, p_old, G, GV, p_new)
   do n=1,sponge%fldno
     if (associated(sponge%var(n)%p, p_old)) sponge%var(n)%p => p_new
   enddo
-
 end subroutine update_ALE_sponge_field
 
 
@@ -1311,16 +1277,16 @@ subroutine ALE_sponge_end(CS)
 
   if (.not.associated(CS)) return
 
-  if (associated(CS%col_i)) deallocate(CS%col_i)
-  if (associated(CS%col_i_u)) deallocate(CS%col_i_u)
-  if (associated(CS%col_i_v)) deallocate(CS%col_i_v)
-  if (associated(CS%col_j)) deallocate(CS%col_j)
-  if (associated(CS%col_j_u)) deallocate(CS%col_j_u)
-  if (associated(CS%col_j_v)) deallocate(CS%col_j_v)
+  if (allocated(CS%col_i)) deallocate(CS%col_i)
+  if (allocated(CS%col_i_u)) deallocate(CS%col_i_u)
+  if (allocated(CS%col_i_v)) deallocate(CS%col_i_v)
+  if (allocated(CS%col_j)) deallocate(CS%col_j)
+  if (allocated(CS%col_j_u)) deallocate(CS%col_j_u)
+  if (allocated(CS%col_j_v)) deallocate(CS%col_j_v)
 
-  if (associated(CS%Iresttime_col)) deallocate(CS%Iresttime_col)
-  if (associated(CS%Iresttime_col_u)) deallocate(CS%Iresttime_col_u)
-  if (associated(CS%Iresttime_col_v)) deallocate(CS%Iresttime_col_v)
+  if (allocated(CS%Iresttime_col)) deallocate(CS%Iresttime_col)
+  if (allocated(CS%Iresttime_col_u)) deallocate(CS%Iresttime_col_u)
+  if (allocated(CS%Iresttime_col_v)) deallocate(CS%Iresttime_col_v)
 
   do m=1,CS%fldno
     if (associated(CS%Ref_val(m)%p)) deallocate(CS%Ref_val(m)%p)

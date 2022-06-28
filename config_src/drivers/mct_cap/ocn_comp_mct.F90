@@ -404,10 +404,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
-  call seq_infodata_PutData( glb%infodata, &
-       ocn_nx = ni , ocn_ny = nj)
-  call seq_infodata_PutData( glb%infodata, &
-       ocn_prognostic=.true., ocnrof_prognostic=.true.)
+  call seq_infodata_PutData(glb%infodata, ocn_nx=ni, ocn_ny=nj)
+  call seq_infodata_PutData(glb%infodata, ocn_prognostic=.true., ocnrof_prognostic=.true.)
 
   if (debug .and. root_pe().eq.pe_here()) print *, "leaving ocean_init_mct"
 
@@ -722,7 +720,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   call mct_gGrid_importRattr(dom_ocn,"lat",data,lsize)
 
   k = 0
-  L2_to_rad2 = grid%US%L_to_m**2 / grid%Rad_Earth**2
+  L2_to_rad2 = 1.0 / grid%Rad_Earth_L**2
   do j = grid%jsc, grid%jec
     do i = grid%isc, grid%iec
       k = k + 1 ! Increment position within gindex
@@ -754,15 +752,15 @@ character(32) function get_runtype()
 
   call seq_infodata_GetData( glb%infodata, start_type=starttype)
 
-    if (   trim(starttype) == trim(seq_infodata_start_type_start)) then
-     get_runtype = "initial"
+  if (   trim(starttype) == trim(seq_infodata_start_type_start)) then
+    get_runtype = "initial"
   else if (trim(starttype) == trim(seq_infodata_start_type_cont) ) then
-     get_runtype = "continue"
+    get_runtype = "continue"
   else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
-     get_runtype = "branch"
+    get_runtype = "branch"
   else
-     write(stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
-     call exit(0)
+    write(stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
+    call exit(0)
   end if
   return
 
