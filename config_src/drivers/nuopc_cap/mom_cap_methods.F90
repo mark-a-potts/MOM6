@@ -354,7 +354,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   real                            :: slope, u_min, u_max
   integer                         :: day, secs
   type(ESMF_TimeInterval)         :: timeStep
-  integer                         :: dt_int,ii,jj
+  integer                         :: dt_int
   real                            :: inv_dt_int  !< The inverse of coupling time interval in s-1.
   type(ESMF_StateItem_Flag)       :: itemFlag
   real(ESMF_KIND_R8), allocatable :: omask(:,:)
@@ -362,7 +362,6 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   real(ESMF_KIND_R8), allocatable :: ocz(:,:), ocm(:,:)
   real(ESMF_KIND_R8), allocatable :: ocz_rot(:,:), ocm_rot(:,:)
   real(ESMF_KIND_R8), allocatable :: ssh(:,:)
-  real(ESMF_KIND_R8), allocatable :: PT(:,:,:)
   real(ESMF_KIND_R8), allocatable :: dhdx(:,:), dhdy(:,:)
   real(ESMF_KIND_R8), allocatable :: dhdx_rot(:,:), dhdy_rot(:,:)
   character(len=*)  , parameter   :: subname = '(mom_export)'
@@ -500,34 +499,38 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   endif
 
   ! -------
-  ! 3d potential temperature
+  ! 3D Temperature
   ! -------
-! allocate(PT(isc:iec, jsc:jec, ocean_grid%ke))
-! do k = 1,ocean_grid%ke
-!   do j = jsc,jec
-!      do i = isc,iec
-!        PT(i,j,k) =  ocean_state%MOM_CSp%T(i,j,k)
-!      enddo 
-!   enddo 
-! enddo 
   call ESMF_StateGet(exportState, 'tocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State3d_SetExport(exportState, 'tocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%T, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
+
+  ! -------
+  ! 3D Salinity
+  ! -------
   call ESMF_StateGet(exportState, 'socn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State3d_SetExport(exportState, 'socn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%S, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
+
+  ! -------
+  ! 3D U velocity
+  ! -------
   call ESMF_StateGet(exportState, 'uocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State3d_SetExport(exportState, 'uocn', &
           isc, iec, jsc, jec, ocean_grid%ke, ocean_state%MOM_CSp%u, ocean_grid, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
   endif
+
+  ! -------
+  ! 3D V velocity
+  ! -------
   call ESMF_StateGet(exportState, 'vocn', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State3d_SetExport(exportState, 'vocn', &

@@ -12,7 +12,7 @@ use mpp_domains_mod,          only: domain2d, mpp_get_compute_domain, mpp_get_co
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
 use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR, MPP_APPEND, mpp_close, MPP_SINGLE
-use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id, mpp_init
+use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
 use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
 use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
 use time_manager_mod,         only: set_calendar_type, time_type, increment_date
@@ -131,7 +131,7 @@ type (fld_list_type) :: fldsToOcn(fldsMax)
 integer              :: fldsFrOcn_num = 0
 type (fld_list_type) :: fldsFrOcn(fldsMax)
 
-integer              :: dbug = 1
+integer              :: dbug = 0
 integer              :: import_slice = 1
 integer              :: export_slice = 1
 character(len=256)   :: tmpstr
@@ -486,8 +486,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call ESMF_LogWrite(trim(subname)//': nthreads = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
 !$  call omp_set_num_threads(nthrds)
+
   call fms_init(mpi_comm_mom)
-  call mpp_init(mpi_comm_mom)
   call constants_init
   call field_manager_init
 
@@ -980,109 +980,38 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
   if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-     !---------------------------------
-     ! Create a MOM6 mesh
-     !---------------------------------
-     call get_global_grid_size(ocean_grid, ni, nj)
-     lsize = ( ocean_grid%iec - ocean_grid%isc + 1 ) * ( ocean_grid%jec - ocean_grid%jsc + 1 )
+    !---------------------------------
+    ! Create a MOM6 mesh
+    !---------------------------------
 
-     ! Create the global index space for the computational domain
-     allocate(gindex(lsize))
-     k = 0
-     do j = ocean_grid%jsc, ocean_grid%jec
-        jg = j + ocean_grid%jdg_offset
-        do i = ocean_grid%isc, ocean_grid%iec
-           ig = i + ocean_grid%idg_offset
-           k = k + 1 ! Increment position within gindex
-           gindex(k) = ni * (jg - 1) + ig
-        enddo
-     enddo
+    call get_global_grid_size(ocean_grid, ni, nj)
+    lsize = ( ocean_grid%iec - ocean_grid%isc + 1 ) * ( ocean_grid%jec - ocean_grid%jsc + 1 )
 
-     DistGrid = ESMF_DistGridCreate(arbSeqIndexList=gindex, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! Create the global index space for the computational domain
+    allocate(gindex(lsize))
+    k = 0
+    do j = ocean_grid%jsc, ocean_grid%jec
+      jg = j + ocean_grid%jdg_offset
+      do i = ocean_grid%isc, ocean_grid%iec
+        ig = i + ocean_grid%idg_offset
+        k = k + 1 ! Increment position within gindex
+        gindex(k) = ni * (jg - 1) + ig
+      enddo
+    enddo
 
-     ! read in the mesh
-     call NUOPC_CompAttributeGet(gcomp, name='mesh_ocn', value=cvalue, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    DistGrid = ESMF_DistGridCreate(arbSeqIndexList=gindex, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-     EMeshTemp = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! read in the mesh
+    call NUOPC_CompAttributeGet(gcomp, name='mesh_ocn', value=cvalue, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+    EMeshTemp = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-     if (localPet == 0) then
-        write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
-     endif
-
-     ! recreate the mesh using the above distGrid
-     EMesh = ESMF_MeshCreate(EMeshTemp, elementDistgrid=Distgrid, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-     ! Check for consistency of lat, lon and mask between mesh and mom6 grid
-     call ESMF_MeshGet(Emesh, spatialDim=spatialDim, numOwnedElements=numOwnedElements, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-     allocate(ownedElemCoords(spatialDim*numOwnedElements))
-     allocate(lonMesh(numOwnedElements), lon(numOwnedElements))
-     allocate(latMesh(numOwnedElements), lat(numOwnedElements))
-     allocate(maskMesh(numOwnedElements), mask(numOwnedElements))
-
-     call ESMF_MeshGet(Emesh, ownedElemCoords=ownedElemCoords, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-     do n = 1,numOwnedElements
-        lonMesh(n) = ownedElemCoords(2*n-1)
-        latMesh(n) = ownedElemCoords(2*n)
-     end do
-
-     elemMaskArray = ESMF_ArrayCreate(Distgrid, maskMesh, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-     call ESMF_MeshGet(Emesh, elemMaskArray=elemMaskArray, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
-     n = 0
-     do j = jsc, jec
-       jg = j + ocean_grid%jsc - jsc
-       do i = isc, iec
-         ig = i + ocean_grid%isc - isc
-         n = n+1
-         mask(n) = ocean_grid%mask2dT(ig,jg)
-         lon(n)  = ocean_grid%geolonT(ig,jg)
-         lat(n)  = ocean_grid%geolatT(ig,jg)
-       end do
-     end do
-
-     eps_omesh = get_eps_omesh(ocean_state)
-     do n = 1,numOwnedElements
-       diff_lon = abs(mod(lonMesh(n) - lon(n),360.0))
-       if (diff_lon > eps_omesh) then
-         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is "//&
-                "greater than parameter EPS_OMESH. n, lonMesh(n), lon(n), diff_lon, "//&
-                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
-         write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon, eps_omesh
-         call MOM_error(FATAL, err_msg)
-       end if
-       diff_lat = abs(latMesh(n) - lat(n))
-       if (diff_lat > eps_omesh) then
-         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is"//&
-                "greater than parameter EPS_OMESH. n, latMesh(n), lat(n), diff_lat, "//&
-                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
-         write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat, eps_omesh
-         call MOM_error(FATAL, err_msg)
-        end if
-        if (abs(maskMesh(n) - mask(n)) > 0) then
-          frmt = "('ERROR: ESMF mesh and MOM6 domain masks are inconsistent! - "//&
-                 "MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
-          write(err_msg, frmt)n,maskMesh(n),mask(n)
-          call MOM_error(FATAL, err_msg)
-        end if
-     end do
-
-     ! realize the import and export fields using the mesh
-     call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-     call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (localPet == 0) then
+      write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
+    endif
 
     ! recreate the mesh using the above distGrid
     EMesh = ESMF_MeshCreate(EMeshTemp, elementDistgrid=Distgrid, rc=rc)
@@ -1149,10 +1078,11 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     end do
 
     ! realize the import and export fields using the mesh
-    call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
+    
+    call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, rc=rc)
+    call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     !---------------------------------
@@ -1644,12 +1574,9 @@ subroutine ModelAdvance(gcomp, rc)
 
   call ESMF_TimeGet(currTime,          timestring=import_timestr, rc=rc)
   call ESMF_TimeGet(currTime+timestep, timestring=export_timestr, rc=rc)
-  call ESMF_LogWrite("got time", ESMF_LOGMSG_INFO)
 
   Time_step_coupled = esmf2fms_time(timeStep)
-  call ESMF_LogWrite("called esfm2fms", ESMF_LOGMSG_INFO)
   Time = esmf2fms_time(currTime)
-  call ESMF_LogWrite("called esfm2fms again", ESMF_LOGMSG_INFO)
 
   !---------------
   ! Apply ocean lag for startup runs:
@@ -1682,45 +1609,22 @@ subroutine ModelAdvance(gcomp, rc)
 
   if (do_advance) then
 
-<<<<<<< HEAD
-  call ESMF_LogWrite("in do advance", ESMF_LOGMSG_INFO)
-     call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-  call ESMF_LogWrite("in do advance 1", ESMF_LOGMSG_INFO)
-     ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
-  call ESMF_LogWrite("in do advance 2", ESMF_LOGMSG_INFO)
-     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
-  call ESMF_LogWrite("in do advance 3", ESMF_LOGMSG_INFO)
-=======
     call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
     ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
->>>>>>> emc/dev/emc
 
     !---------------
     ! Write diagnostics for import
     !---------------
 
-<<<<<<< HEAD
-     if (write_diagnostics) then
-  call ESMF_LogWrite("in do advance 4", ESMF_LOGMSG_INFO)
-      do n = 1,fldsToOcn_num
-  call ESMF_LogWrite("in do advance, fldstoocn", ESMF_LOGMSG_INFO)
-       fldname = fldsToOcn(n)%shortname
-       call ESMF_StateGet(importState, itemName=trim(fldname), itemType=itemType, rc=rc)
-       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-=======
     if (write_diagnostics) then
       do n = 1,fldsToOcn_num
         fldname = fldsToOcn(n)%shortname
         call ESMF_StateGet(importState, itemName=trim(fldname), itemType=itemType, rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
->>>>>>> emc/dev/emc
 
         if (itemType /= ESMF_STATEITEM_NOTFOUND) then
           call ESMF_StateGet(importState, itemName=trim(fldname), field=lfield, rc=rc)
@@ -1742,55 +1646,29 @@ subroutine ModelAdvance(gcomp, rc)
     ! Get ocean grid
     !---------------
 
-<<<<<<< HEAD
-  call ESMF_LogWrite("in do advance 5", ESMF_LOGMSG_INFO)
-     call get_ocean_grid(ocean_state, ocean_grid)
-=======
     call get_ocean_grid(ocean_state, ocean_grid)
->>>>>>> emc/dev/emc
 
     !---------------
     ! Import data
     !---------------
 
-<<<<<<< HEAD
-  call ESMF_LogWrite("in do advance 6", ESMF_LOGMSG_INFO)
-     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-=======
     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
->>>>>>> emc/dev/emc
 
     !---------------
     ! Update MOM6
     !---------------
 
-<<<<<<< HEAD
-  call ESMF_LogWrite("in do advance 6.1", ESMF_LOGMSG_INFO)
-     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
-     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
-  call ESMF_LogWrite("in do advance 6.2", ESMF_LOGMSG_INFO)
-     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
-=======
     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
->>>>>>> emc/dev/emc
 
     !---------------
     ! Export Data
     !---------------
 
-<<<<<<< HEAD
-  call ESMF_LogWrite("in do advance 7", ESMF_LOGMSG_INFO)
-     call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
-  call ESMF_LogWrite("in do advance 8", ESMF_LOGMSG_INFO)
-     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-=======
     call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
->>>>>>> emc/dev/emc
 
     if (dbug > 0) then
       call state_diagnose(exportState,subname//':ES ',rc=rc)
@@ -1868,12 +1746,7 @@ subroutine ModelAdvance(gcomp, rc)
           write(restartname,'(A)')"MOM.res"
           write(stoch_restartname,'(A)')"ocn_stoch.res.nc"
         else
-<<<<<<< HEAD
-  call ESMF_LogWrite("in do advance 9", ESMF_LOGMSG_INFO)
-           write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
-=======
           write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
->>>>>>> emc/dev/emc
                 "MOM.res.", year, month, day, hour, minute, seconds
           write(stoch_restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
                 "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
@@ -2204,13 +2077,13 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
   ! local variables
   integer                     :: i
   type(ESMF_Field)            :: field
-  type(ESMF_Field)            :: destfield
   real(ESMF_KIND_R8), pointer :: fldptr1d(:)   ! for mesh
   real(ESMF_KIND_R8), pointer :: fldptr2d(:,:) ! for grid
   character(len=*),parameter  :: subname='(MOM_cap:MOM_RealizeFields)'
   !--------------------------------------------------------
 
   rc = ESMF_SUCCESS
+
   do i = 1, nfields
 
     if (NUOPC_IsConnected(state, fieldName=field_defs(i)%shortname)) then
@@ -2240,11 +2113,11 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
           fldptr2d(:,:) = 0.0
 
         else if (present(mesh)) then
-<<<<<<< HEAD
+
            if((field_defs(i)%shortname == 'tocn').or.(field_defs(i)%shortname == 'socn').or. &
               (field_defs(i)%shortname == 'vocn').or.(field_defs(i)%shortname == 'uocn')) then
              field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
-                  ungriddedLBound=(/1/), ungriddedUBound=(/75/),name=field_defs(i)%shortname, rc=rc)
+                  ungriddedLBound=(/1/), ungriddedUBound=(/ke/),name=field_defs(i)%shortname, rc=rc)
              if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
              ! initialize fldptr to zero
@@ -2262,17 +2135,6 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
              if (ChkErr(rc,__LINE__,u_FILE_u)) return
              fldptr1d(:) = 0.0
            endif
-=======
-
-          field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
-               name=field_defs(i)%shortname, rc=rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-          ! initialize fldptr to zero
-          call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
-          fldptr1d(:) = 0.0
->>>>>>> emc/dev/emc
 
         endif
 

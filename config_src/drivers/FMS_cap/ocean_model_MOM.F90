@@ -121,9 +121,6 @@ type, public ::  ocean_public_type
     melt_potential => NULL(), & !< Instantaneous heat used to melt sea ice [J m-2].
     OBLD => NULL(),   & !< Ocean boundary layer depth [m].
     area => NULL()      !< cell area of the ocean surface [m2].
-  real, pointer, dimension(:,:,:)  :: &
-    t => NULL(), & !< Temperature
-    s => NULL()    !< Salinity
   type(coupler_2d_bc_type) :: fields    !< A structure that may contain named
                                         !! arrays of tracer-related surface fields.
   integer                  :: avg_kount !< A count of contributions to running
