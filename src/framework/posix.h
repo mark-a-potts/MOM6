@@ -14,13 +14,7 @@
 
 ! glibc defines sigsetjmp as __sigsetjmp via macro readable from <setjmp.h>.
 #ifndef SIGSETJMP_NAME
-#ifdef __APPLE__
-! Stupid error A
 #define SIGSETJMP_NAME "sigsetjmp"
-#else
-! Stupid error B
-#define SIGSETJMP_NAME "__sigsetjmp"
-#endif
 #endif
 
 ! This should be defined by /usr/include/signal.h
