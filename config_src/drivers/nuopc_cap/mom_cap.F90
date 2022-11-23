@@ -1055,7 +1055,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     end do
 
     ! realize the import and export fields using the mesh
-    
     call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, ke=ocean_grid%ke, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -2110,6 +2109,7 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
                  name=field_defs(i)%shortname, ungriddedLbound=(/field_defs(i)%ungridded_lbound/), &
                  ungriddedUbound=(/field_defs(i)%ungridded_ubound/), gridToFieldMap=(/2/), rc=rc)
             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
             ! initialize fldptr to zero
             call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
             if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -2118,12 +2118,12 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, ke, rc
             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
                  name=field_defs(i)%shortname, rc=rc)
             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
             ! initialize fldptr to zero
             call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
             if (ChkErr(rc,__LINE__,u_FILE_u)) return
             fldptr1d(:) = 0.0
           endif
-
         endif
       endif
 

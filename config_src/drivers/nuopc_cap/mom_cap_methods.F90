@@ -1001,6 +1001,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
     endif
 
   endif
+
 end subroutine State_SetExport
 
 !> Map input array to export state
