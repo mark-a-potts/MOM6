@@ -14,7 +14,7 @@
 
 ! glibc defines sigsetjmp as __sigsetjmp via macro readable from <setjmp.h>.
 #ifndef SIGSETJMP_NAME
-//DH* 20230117 We had this ... #define SIGSETJMP_NAME "sigsetjmp"
+! DH* 20230117 We had this ... #define SIGSETJMP_NAME "sigsetjmp"
 #define SIGSETJMP_NAME "sigsetjmp_missing"
 #endif
 
